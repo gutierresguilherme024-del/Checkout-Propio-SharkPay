@@ -1,7 +1,7 @@
 'use client'
 import { useMemo } from "react";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
+import { useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
@@ -75,7 +75,7 @@ export function CheckoutCoreSidebar() {
     { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
   ], [activeGatewaysCount, activeTrackingCount, loading]);
 
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const activeUrl = useMemo(
     () => dynamicItems.find((i) => i.url === pathname)?.url ?? "",
     [pathname, dynamicItems]
@@ -124,7 +124,7 @@ export function CheckoutCoreSidebar() {
                         tooltip={`${item.emoji} ${item.title}`}
                       >
                         <Link
-                          href={item.url}
+                          to={item.url}
                           className="group flex items-center gap-2"
                         >
                           <item.icon className="shrink-0" />
@@ -157,7 +157,7 @@ export function CheckoutCoreSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="🏠 Voltar para Home">
-                  <Link href="/" className="group flex items-center gap-2">
+                  <Link to="/" className="group flex items-center gap-2">
                     <Home className="shrink-0" />
                     {!collapsed && <span className="truncate">Voltar para Home</span>}
                   </Link>

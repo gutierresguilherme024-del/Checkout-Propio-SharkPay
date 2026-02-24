@@ -23,3 +23,6 @@ Este documento define as regras de negócio para a exibição e funcionamento da
 ## 3. Exibição no Front-end (Sidebar/Dashboard)
 - O Sidebar deve exibir badges dinâmicos refletindo o número de integrações *reais* conectadas.
 - **Gateway de Pagamento**: Se nenhum estiver conectado, exibir badge de aviso crítico.
+26: 
+27: ## 4. Design e Layout
+28: - **Carrosséis na Home**: Está terminantemente PROIBIDO o uso de carrosséis de imagens ou integrações com navegação por setas e pontos (estilo `IntegrationCarousel` ou `HeroCarousel`) na página inicial. O design deve ser estático e direto.

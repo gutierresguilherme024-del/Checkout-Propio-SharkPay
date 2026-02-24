@@ -66,13 +66,12 @@ export function HeroSection() {
                 <>
                   <Button asChild className="rounded-full" size="lg" variant="secondary">
                     <NavLink to="/checkout/demo">
-                      <PhoneCallIcon className="mr-2 size-4" />
-                      Ver preview do checkout
+                      Ver checkout
                     </NavLink>
                   </Button>
                   <Button asChild className="rounded-full" size="lg">
                     <NavLink to="/admin/overview">
-                      Abrir painel admin
+                      Abrir painel
                       <ArrowRightIcon className="ms-2 size-4" />
                     </NavLink>
                   </Button>

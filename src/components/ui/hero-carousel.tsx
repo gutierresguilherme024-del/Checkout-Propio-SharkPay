@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
 
 // Import images directly from the folder
 import img1 from "./icons integraçoes hero/WhatsApp_Image_2026-02-24_at_01.28.07-removebg-preview.png";
@@ -57,10 +56,9 @@ export function HeroCarousel() {
                     >
                         {/* Background Layer - Blurred for atmosphere */}
                         <div className="absolute inset-0 z-0 overflow-hidden">
-                            <Image
+                            <img
                                 src={images[currentIndex]}
-                                fill
-                                className="object-cover blur-3xl opacity-20 scale-125 select-none"
+                                className="absolute inset-0 w-full h-full object-cover blur-3xl opacity-20 scale-125 select-none"
                                 alt=""
                             />
                         </div>
@@ -68,12 +66,10 @@ export function HeroCarousel() {
                         {/* Main Image Layer */}
                         <div className="relative z-10 w-full h-full flex items-center justify-center p-12 md:p-24">
                             <div className="relative w-[70%] h-[50%]">
-                                <Image
+                                <img
                                     src={images[currentIndex]}
                                     alt={`Slide ${currentIndex + 1}`}
-                                    fill
-                                    className="object-contain select-none drop-shadow-[0_0_50px_rgba(255,255,255,0.05)]"
-                                    priority={currentIndex === 0}
+                                    className="w-full h-full object-contain select-none drop-shadow-[0_0_50px_rgba(255,255,255,0.05)]"
                                 />
                             </div>
                         </div>

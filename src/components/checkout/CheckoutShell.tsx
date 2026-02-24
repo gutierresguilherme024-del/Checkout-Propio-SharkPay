@@ -203,41 +203,33 @@ function Brands() {
 
 export type CheckoutShellProps = {
   settings: CheckoutSettings;
+  product?: {
+    name: string;
+    price: number;
+    delivery_content: string;
+  } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
 };
 
-export function CheckoutShell({ settings, mode = "public", onCaptureUtm }: CheckoutShellProps) {
+export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm }: CheckoutShellProps) {
   /* integration status */
   const { payments, tracking, getStatus, loading } = useIntegrations();
 
   const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments]);
   const isPushinPayActive = useMemo(() => getStatus(payments, 'pushinpay') === 'active', [payments]);
 
-  /* product state */
-  const [selectedProduct, setSelectedProduct] = useState<{ name: string, price: number, delivery_content: string } | null>(null);
+  /* product display data */
+  const displayProduct = useMemo(() => {
+    if (product) return product;
 
-  useEffect(() => {
-    async function loadProduct() {
-      // Tentar carregar do localStorage primeiro (onde salvamos produtos no admin)
-      const local = localStorage.getItem('sco_products');
-      if (local) {
-        const products = JSON.parse(local);
-        if (products.length > 0) {
-          setSelectedProduct(products[products.length - 1]); // Pega o mais recente
-          return;
-        }
-      }
-
-      // Fallback para o produto padrão se nada for encontrado
-      setSelectedProduct({
-        name: settings.headline || "Produto SharkPay",
-        price: 97,
-        delivery_content: "Obrigado por sua compra! Acesse seu produto aqui: https://exemplo.com/acesso"
-      });
-    }
-    loadProduct();
-  }, [settings.headline]);
+    // Fallback apenas para preview do editor se nenhum produto for passado
+    return {
+      name: settings.headline || "Produto SharkPay",
+      price: 97,
+      delivery_content: "Obrigado por sua compra!"
+    };
+  }, [product, settings.headline]);
 
   /* state */
   const [method, setMethod] = useState<PaymentMethod>("card");
@@ -258,7 +250,7 @@ export function CheckoutShell({ settings, mode = "public", onCaptureUtm }: Check
     if (method === 'pix' && !isPushinPayActive && isStripeActive) setMethod('card');
   }, [isStripeActive, isPushinPayActive, loading, method]);
 
-  const amount = selectedProduct?.price || 97;
+  const amount = displayProduct.price;
   const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
 
   /* UTM capture */
@@ -318,8 +310,8 @@ export function CheckoutShell({ settings, mode = "public", onCaptureUtm }: Check
         cardLast4: method === 'card' ? cardNum.slice(-4) : null,
       },
       product: {
-        name: selectedProduct?.name,
-        delivery_content: selectedProduct?.delivery_content
+        name: displayProduct.name,
+        delivery_content: displayProduct.delivery_content
       },
       utms: JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}")
     };
@@ -364,7 +356,7 @@ export function CheckoutShell({ settings, mode = "public", onCaptureUtm }: Check
 
             <div className="sco-sum-product">
               <p className="sco-sum-eyebrow">Produto</p>
-              <h1 className="sco-sum-name">{selectedProduct?.name || settings.headline}</h1>
+              <h1 className="sco-sum-name">{displayProduct.name}</h1>
               <p className="sco-sum-desc">{settings.subheadline}</p>
             </div>
 

@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase/client'
+import { NavLink } from "@/components/NavLink";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 
 export default function Login() {
     const navigate = useNavigate()
@@ -37,7 +40,15 @@ export default function Login() {
     }
 
     return (
-        <div className='min-h-screen flex items-center justify-center bg-slate-950 px-4'>
+        <div className='min-h-screen flex items-center justify-center bg-slate-950 px-4 relative'>
+            <div className="sco-page-topbar">
+                <Button asChild variant="ghost" size="sm" className="text-slate-400 hover:text-white gap-2 h-9 px-3">
+                    <NavLink to="/">
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Home</span>
+                    </NavLink>
+                </Button>
+            </div>
             <div className='w-full max-w-sm bg-slate-900 rounded-2xl p-8 shadow-2xl border border-slate-800'>
                 <div className='flex justify-center mb-8'>
                     <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent'>
@@ -99,7 +110,7 @@ export default function Login() {
                 </div>
 
                 <p className='mt-8 text-center text-xs text-slate-500'>
-                    © 2025 SharkPay. Todos os direitos reservados.
+                    © 2026 SharkPay. Todos os direitos reservados.
                 </p>
             </div>
         </div>

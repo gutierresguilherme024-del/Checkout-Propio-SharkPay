@@ -218,8 +218,17 @@ All colors MUST be HSL.
 .sco-page-topbar {
   position: fixed;
   top: 1rem;
+  left: 1rem;
   right: 1rem;
   z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.sco-page-topbar>* {
+  pointer-events: auto;
 }
 
 .sco-page-body {
