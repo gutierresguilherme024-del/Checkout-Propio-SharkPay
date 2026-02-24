@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +16,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { NavLink } from "@/components/NavLink";
+// import { NavLink } from "@/components/NavLink"; // Removido
 import { BarChart3, CreditCard, Home, Link2, Mail, Palette, Package } from "lucide-react";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { LogoutButton } from "./LogoutButton";
@@ -73,11 +74,10 @@ export function CheckoutCoreSidebar() {
     { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
   ], [activeGatewaysCount, activeTrackingCount, loading]);
 
-  const location = useLocation();
-  const currentPath = location.pathname;
+  const pathname = usePathname();
   const activeUrl = useMemo(
-    () => dynamicItems.find((i) => i.url === currentPath)?.url ?? "",
-    [currentPath, dynamicItems]
+    () => dynamicItems.find((i) => i.url === pathname)?.url ?? "",
+    [pathname, dynamicItems]
   );
 
   return (
@@ -122,11 +122,9 @@ export function CheckoutCoreSidebar() {
                         isActive={active}
                         tooltip={`${item.emoji} ${item.title}`}
                       >
-                        <NavLink
-                          to={item.url}
-                          end
+                        <Link
+                          href={item.url}
                           className="group flex items-center gap-2"
-                          activeClassName=""
                         >
                           <item.icon className="shrink-0" />
                           {!collapsed && (
@@ -141,7 +139,7 @@ export function CheckoutCoreSidebar() {
                               )}
                             </span>
                           )}
-                        </NavLink>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
@@ -158,10 +156,10 @@ export function CheckoutCoreSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="🏠 Voltar para Home">
-                  <NavLink to="/" end className="group flex items-center gap-2" activeClassName="">
+                  <Link href="/" className="group flex items-center gap-2">
                     <Home className="shrink-0" />
                     {!collapsed && <span className="truncate">Voltar para Home</span>}
-                  </NavLink>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>

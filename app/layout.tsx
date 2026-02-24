@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Providers } from "@/components/Providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,13 +18,9 @@ export default function RootLayout({
     return (
         <html lang="pt-BR" suppressHydrationWarning>
             <body className={inter.className}>
-                <ThemeProvider>
-                    <TooltipProvider>
-                        {children}
-                        <Toaster />
-                        <Sonner />
-                    </TooltipProvider>
-                </ThemeProvider>
+                <Providers>
+                    {children}
+                </Providers>
             </body>
         </html>
     );

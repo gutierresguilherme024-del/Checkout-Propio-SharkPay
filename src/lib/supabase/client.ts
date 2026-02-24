@@ -2,13 +2,14 @@
 import { createBrowserClient } from '@supabase/ssr'
 
 export function createSupabaseBrowserClient() {
-    // Suporte híbrido para Next.js (process.env) e Vite (import.meta.env)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    // Suporte robusto para Next.js e Vite, evitando quebra no build do Next.js
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        (typeof process !== 'undefined' && process.env ? process.env.NEXT_PUBLIC_SUPABASE_URL : '') ||
+        (globalThis as any).import?.meta?.env?.VITE_SUPABASE_URL;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-        console.warn('Supabase credentials not found in environment variables');
-    }
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        (typeof process !== 'undefined' && process.env ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY : '') ||
+        (globalThis as any).import?.meta?.env?.VITE_SUPABASE_ANON_KEY;
 
     return createBrowserClient(
         supabaseUrl || '',
