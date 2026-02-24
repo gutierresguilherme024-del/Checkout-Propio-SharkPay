@@ -1,11 +1,9 @@
-'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '@/lib/supabase/client'
 
-export default function LoginPage() {
-    const router = useRouter()
-    const supabase = createSupabaseBrowserClient()
+export default function Login() {
+    const navigate = useNavigate()
     const [email, setEmail] = useState('')
     const [senha, setSenha] = useState('')
     const [erro, setErro] = useState('')
@@ -22,8 +20,7 @@ export default function LoginPage() {
             setLoading(false)
             return
         }
-        router.push('/admin')
-        router.refresh()
+        navigate('/admin/overview')
     }
 
     return (

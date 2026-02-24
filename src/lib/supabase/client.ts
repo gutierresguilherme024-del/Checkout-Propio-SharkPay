@@ -1,12 +1,10 @@
-'use client'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 
-export function createSupabaseBrowserClient() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-    return createBrowserClient(
-        supabaseUrl,
-        supabaseAnonKey
-    )
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas')
 }
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)

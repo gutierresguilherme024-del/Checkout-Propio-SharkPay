@@ -1,16 +1,17 @@
-'use client'
-import { createSupabaseBrowserClient } from '../../lib/supabase/client.ts'
-import { useRouter } from 'next/navigation'
+import { signOut } from '@/lib/supabase/auth'
+import { useNavigate } from 'react-router-dom'
 import { LogOut } from 'lucide-react'
 
 export function LogoutButton({ collapsed }: { collapsed?: boolean }) {
-    const supabase = createSupabaseBrowserClient()
-    const router = useRouter()
+    const navigate = useNavigate()
 
     async function handleLogout() {
-        await supabase.auth.signOut()
-        router.push('/login')
-        router.refresh()
+        try {
+            await signOut()
+            navigate('/login')
+        } catch (error) {
+            console.error('Erro ao sair:', error)
+        }
     }
 
     return (
