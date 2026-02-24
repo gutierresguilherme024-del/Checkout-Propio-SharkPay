@@ -16,24 +16,69 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
-import { BarChart3, CreditCard, Home, Link2, Mail, Palette } from "lucide-react";
+import { BarChart3, CreditCard, Home, Link2, Mail, Palette, Package } from "lucide-react";
+import { useIntegrations } from "@/hooks/use-integrations";
+import { LogoutButton } from "./LogoutButton";
 
 const items = [
-  { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊" },
-  { title: "Rastreamento", url: "/admin/tracking", icon: Link2, emoji: "🔗" },
-  { title: "Pagamentos", url: "/admin/payments", icon: CreditCard, emoji: "💳" },
-  { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧" },
-  { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨" },
+  { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊", badge: null },
+  {
+    title: "Rastreamento",
+    url: "/admin/tracking",
+    icon: Link2,
+    emoji: "🔗",
+    badge: { label: "UTMify", color: "bg-[hsl(220,80%,55%)] text-white" },
+  },
+  {
+    title: "Pagamentos",
+    url: "/admin/payments",
+    icon: CreditCard,
+    emoji: "💳",
+    badge: { label: "2 gateways", color: "bg-[hsl(260,85%,60%)] text-white" },
+  },
+  { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
+  { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },
+  { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
 ] as const;
 
 export function CheckoutCoreSidebar() {
   const { state, isMobile, setOpen } = useSidebar();
   const collapsed = state === "collapsed";
+  const { activeGatewaysCount, activeTrackingCount, loading } = useIntegrations();
+
+  const dynamicItems = useMemo(() => [
+    { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊", badge: null },
+    {
+      title: "Rastreamento",
+      url: "/admin/tracking",
+      icon: Link2,
+      emoji: "🔗",
+      badge: {
+        label: loading ? "..." : (activeTrackingCount > 0 ? "Ativo" : "Inativo"),
+        color: activeTrackingCount > 0 ? "bg-primary text-primary-foreground shadow-[0_0_10px_hsl(var(--primary)/0.4)]" : "bg-muted text-muted-foreground"
+      },
+    },
+    {
+      title: "Pagamentos",
+      url: "/admin/payments",
+      icon: CreditCard,
+      emoji: "💳",
+      badge: {
+        label: loading ? "..." : `${activeGatewaysCount} gateways`,
+        color: activeGatewaysCount > 0 ? "bg-accent text-accent-foreground shadow-[0_0_12px_hsl(var(--accent)/0.4)]" : "bg-destructive/20 text-destructive border border-destructive/30"
+      },
+    },
+    { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
+    { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },
+    { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
+  ], [activeGatewaysCount, activeTrackingCount, loading]);
 
   const location = useLocation();
-
   const currentPath = location.pathname;
-  const activeUrl = useMemo(() => items.find((i) => i.url === currentPath)?.url ?? "", [currentPath]);
+  const activeUrl = useMemo(
+    () => dynamicItems.find((i) => i.url === currentPath)?.url ?? "",
+    [currentPath, dynamicItems]
+  );
 
   return (
     <Sidebar
@@ -46,20 +91,18 @@ export function CheckoutCoreSidebar() {
         if (!isMobile) setOpen(false);
       }}
     >
-      {/* Rail: facilita demonstrar que o sidebar pode ser reaberto/ajustado */}
       <SidebarRail />
 
-      {/* Container flex para garantir divisão/rodapé consistentes */}
       <div className="flex h-full min-h-0 flex-col">
         <SidebarHeader className="gap-2 px-4 py-4">
           <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm">
             <div className="grid size-9 place-items-center rounded-md bg-[image:var(--gradient-hero)] text-primary-foreground shadow-[var(--shadow-glow)]">
-              <span className="text-sm font-semibold">CC</span>
+              <span className="text-sm font-brand font-semibold">SP</span>
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Checkout Core</p>
-                <p className="truncate text-xs text-muted-foreground">v2 • uso interno</p>
+                <p className="truncate text-sm font-semibold font-display">SharkPay Checkout</p>
+                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">v2 • uso interno</p>
               </div>
             )}
           </div>
@@ -70,14 +113,34 @@ export function CheckoutCoreSidebar() {
             <SidebarGroupLabel>Menu</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {items.map((item) => {
+                {dynamicItems.map((item) => {
                   const active = activeUrl === item.url;
                   return (
                     <SidebarMenuItem key={item.url}>
-                      <SidebarMenuButton asChild isActive={active} tooltip={`${item.emoji} ${item.title}`}>
-                        <NavLink to={item.url} end className="group flex items-center gap-2" activeClassName="">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active}
+                        tooltip={`${item.emoji} ${item.title}`}
+                      >
+                        <NavLink
+                          to={item.url}
+                          end
+                          className="group flex items-center gap-2"
+                          activeClassName=""
+                        >
                           <item.icon className="shrink-0" />
-                          {!collapsed && <span className="truncate">{item.title}</span>}
+                          {!collapsed && (
+                            <span className="flex flex-1 items-center justify-between truncate">
+                              <span className="truncate">{item.title}</span>
+                              {item.badge && (
+                                <span
+                                  className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none ${item.badge.color} transition-all duration-300`}
+                                >
+                                  {item.badge.label}
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -100,6 +163,9 @@ export function CheckoutCoreSidebar() {
                     {!collapsed && <span className="truncate">Voltar para Home</span>}
                   </NavLink>
                 </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <LogoutButton collapsed={collapsed} />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>

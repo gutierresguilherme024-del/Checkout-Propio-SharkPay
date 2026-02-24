@@ -1,228 +1,546 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { integrationService } from "@/lib/integrations";
+import { toast } from "sonner";
+import { useIntegrations } from "@/hooks/use-integrations";
 import type { CheckoutSettings, PaymentMethod } from "./types";
 
-function formatMoneyBRL(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+/* ─── formatters ─────────────────────────────────────── */
+function fmtBRL(v: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 
+/* ─── countdown hook ─────────────────────────────────── */
 function useCountdown(minutes: number, enabled: boolean) {
   const initial = minutes * 60;
-  const [seconds, setSeconds] = useState(initial);
-
+  const [sec, setSec] = useState(initial);
   useEffect(() => {
     if (!enabled) return;
-    setSeconds(initial);
-    const t = window.setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : 0)), 1000);
+    setSec(initial);
+    const t = window.setInterval(() => setSec((s) => (s > 0 ? s - 1 : 0)), 1000);
     return () => window.clearInterval(t);
   }, [enabled, initial]);
-
-  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
-  const ss = String(seconds % 60).padStart(2, "0");
-  return { mm, ss, done: enabled && seconds === 0 };
+  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+  const ss = String(sec % 60).padStart(2, "0");
+  return { mm, ss, done: enabled && sec === 0 };
 }
+
+/* ─── mini SVG icons ─────────────────────────────────── */
+const Ico = {
+  Lock: () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  ),
+  Shield: () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  Check: () => (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12l5 5L20 7" />
+    </svg>
+  ),
+  Clock: () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  ),
+  Copy: () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+  Close: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+      <path d="M18 6L6 18M6 6l12 12" />
+    </svg>
+  ),
+  Pix: () => (
+    <svg width="18" height="18" viewBox="0 0 512 512" fill="#32BCAD">
+      <path d="M112.57 391.19c20.056 0 38.928-7.808 53.12-22l76.693-76.692c5.344-5.345 14.667-5.337 20 0l76.992 76.992c14.192 14.192 33.064 22 53.12 22h15.232l-97.28 97.28c-29.992 29.992-78.6 29.992-108.6 0l-97.6-97.6 8.323.02zM112.57 120.81h-8.32l97.6-97.6c29.992-29.992 78.6-29.992 108.6 0l97.28 97.28h-15.232c-20.056 0-38.928 7.808-53.12 22l-76.992 76.992c-5.497 5.497-14.503 5.497-20 0L165.69 142.81c-14.192-14.192-33.064-22-53.12-22z" />
+      <path d="M22.81 198.61l55.68-55.68h33.08c13.568 0 26.496 5.344 36.064 14.928l76.688 76.688c14.56 14.56 39.64 14.56 54.2 0l76.992-76.992c9.568-9.568 22.48-14.912 36.048-14.912h41.792l55.84 55.84c29.992 29.992 29.992 78.6 0 108.6l-55.84 55.84h-41.792c-13.568 0-26.48-5.344-36.048-14.912l-76.992-76.992c-7.28-7.28-16.84-10.92-26.4-10.92s-19.12 3.64-26.4 10.92l-76.688 76.688c-9.568 9.568-22.496 14.928-36.064 14.928H78.49L22.81 307.21c-29.992-29.992-29.992-78.608 0-108.6z" />
+    </svg>
+  ),
+  Card: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <rect x="5" y="14" width="4" height="2" rx="0.5" fill="currentColor" stroke="none" opacity=".5" />
+    </svg>
+  ),
+};
+
+/* ─── PIX QR Modal ──────────────────────────────────── */
+const MOCK_PIX = "00020126580014BR.GOV.BCB.PIX0136e464f9b4-5e73-4a81-a88d-98c76e39c52352040000530398654071234.565802BR5924SharkPay Checkout Dev60145302BR62070503***63047A8F";
+
+function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", handler);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handler);
+    };
+  }, [onClose]);
+
+  const doCopy = async () => {
+    try { await navigator.clipboard.writeText(MOCK_PIX); } catch { }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="pix-overlay" onClick={(e) => e.target === e.currentTarget && onClose()} role="dialog" aria-modal>
+      <div className="pix-panel">
+        {/* header */}
+        <div className="pix-panel-hd">
+          <span className="pix-panel-title">
+            <span className="pix-dot" />
+            Pagamento via Pix
+          </span>
+          <button onClick={onClose} className="pix-close" aria-label="Fechar"><Ico.Close /></button>
+        </div>
+
+        {/* amount */}
+        <div className="pix-amount-row">
+          <span>Valor a pagar</span>
+          <strong>{fmtBRL(amount)}</strong>
+        </div>
+
+        {/* QR */}
+        <div className="pix-qr-wrap">
+          <div className="pix-qr-box">
+            <svg width="148" height="148" viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Finder pattern TL */}
+              <rect x="8" y="8" width="42" height="42" rx="5" fill="currentColor" />
+              <rect x="14" y="14" width="30" height="30" rx="3" fill="white" />
+              <rect x="20" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
+              {/* Finder pattern TR */}
+              <rect x="98" y="8" width="42" height="42" rx="5" fill="currentColor" />
+              <rect x="104" y="14" width="30" height="30" rx="3" fill="white" />
+              <rect x="110" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
+              {/* Finder pattern BL */}
+              <rect x="8" y="98" width="42" height="42" rx="5" fill="currentColor" />
+              <rect x="14" y="104" width="30" height="30" rx="3" fill="white" />
+              <rect x="20" y="110" width="18" height="18" rx="1.5" fill="currentColor" />
+              {/* Data modules */}
+              {[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].flatMap((x, i) =>
+                [8, 13, 18, 23, 28, 33, 38, 43, 48, 55].map((y, j) =>
+                  (i + j) % 3 !== 0 ? <rect key={`${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i * j) % 5 === 0 ? 0.3 : 1} /> : null
+                )
+              )}
+              {[8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116, 122, 128].flatMap((y, i) =>
+                [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].map((x, j) =>
+                  (i + j) % 4 !== 1 ? <rect key={`d-${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i + j) % 7 === 0 ? 0.2 : 0.85} /> : null
+                )
+              )}
+              {/* center logo */}
+              <rect x="56" y="56" width="36" height="36" rx="6" fill="white" />
+              <text x="74" y="79" textAnchor="middle" fill="#32BCAD" fontSize="13" fontWeight="800" fontFamily="system-ui">PIX</text>
+            </svg>
+          </div>
+          <p className="pix-qr-hint">Escaneie com o app do seu banco</p>
+        </div>
+
+        {/* steps */}
+        <ol className="pix-steps">
+          {["Abra o app do seu banco", "Selecione Pix → Pagar", "Escaneie ou use o código abaixo"].map((s, i) => (
+            <li key={i}><span className="pix-step-n">{i + 1}</span>{s}</li>
+          ))}
+        </ol>
+
+        {/* copy */}
+        <div className="pix-copy-block">
+          <div className="pix-copy-label">Pix copia e cola</div>
+          <div className="pix-copy-row">
+            <code className="pix-copy-code">{MOCK_PIX.slice(0, 42)}…</code>
+            <button onClick={doCopy} className={cn("pix-copy-btn", copied && "pix-copy-btn--ok")}>
+              {copied ? <Ico.Check /> : <Ico.Copy />}
+              {copied ? "Copiado!" : "Copiar"}
+            </button>
+          </div>
+        </div>
+
+        {/* expiry */}
+        <div className="pix-expiry">
+          <Ico.Clock />
+          QR expira em <strong>30 minutos</strong>
+        </div>
+
+        {/* footer */}
+        <div className="pix-panel-ft">
+          <Ico.Shield />
+          Transação processada com segurança pelo SharkPay
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Card brand badges ───────────────────────────────── */
+function Brands() {
+  return (
+    <div className="sco-brands">
+      {[["VISA", "#1a1f71", "#fff"], ["MC", "#eb001b", "#fff"], ["ELO", "#ffcb05", "#000"], ["AMEX", "#016fd0", "#fff"]].map(([n, bg, c]) => (
+        <span key={n} className="sco-brand" style={{ background: bg, color: c }}>{n}</span>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN COMPONENT
+═══════════════════════════════════════════════════════ */
 
 export type CheckoutShellProps = {
   settings: CheckoutSettings;
   mode?: "public" | "preview";
-  onCaptureUtm?: (utms: Record<string, string>) => void;
+  onCaptureUtm?: (u: Record<string, string>) => void;
 };
 
 export function CheckoutShell({ settings, mode = "public", onCaptureUtm }: CheckoutShellProps) {
-  const [method, setMethod] = useState<PaymentMethod>("pix");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [consent, setConsent] = useState(true);
+  /* integration status */
+  const { payments, tracking, getStatus, loading } = useIntegrations();
 
-  const amount = 97;
-  const countdown = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
+  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments]);
+  const isPushinPayActive = useMemo(() => getStatus(payments, 'pushinpay') === 'active', [payments]);
 
-  const brandStyle = useMemo(() => {
-    // HSL: keep saturation/contrast consistent, only hue changes.
-    const h = settings.primaryHue;
-    return {
-      "--brand": `${h} 95% 48%`,
-      "--brand-2": `${(h + 24) % 360} 95% 56%`,
-      "--brand-ink": `${h} 92% 12%`,
-    } as React.CSSProperties;
-  }, [settings.primaryHue]);
+  /* product state */
+  const [selectedProduct, setSelectedProduct] = useState<{ name: string, price: number, delivery_content: string } | null>(null);
 
   useEffect(() => {
-    if (mode !== "public") return;
-    const params = new URLSearchParams(window.location.search);
-    const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
-    const utms: Record<string, string> = {};
-    for (const k of keys) {
-      const v = params.get(k);
-      if (v) utms[k] = v;
+    async function loadProduct() {
+      // Tentar carregar do localStorage primeiro (onde salvamos produtos no admin)
+      const local = localStorage.getItem('sco_products');
+      if (local) {
+        const products = JSON.parse(local);
+        if (products.length > 0) {
+          setSelectedProduct(products[products.length - 1]); // Pega o mais recente
+          return;
+        }
+      }
+
+      // Fallback para o produto padrão se nada for encontrado
+      setSelectedProduct({
+        name: settings.headline || "Produto SharkPay",
+        price: 97,
+        delivery_content: "Obrigado por sua compra! Acesse seu produto aqui: https://exemplo.com/acesso"
+      });
     }
+    loadProduct();
+  }, [settings.headline]);
+
+  /* state */
+  const [method, setMethod] = useState<PaymentMethod>("card");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [cardNum, setCardNum] = useState("");
+  const [cardExp, setCardExp] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [cardHolder, setCardHolder] = useState("");
+  const [consent, setConsent] = useState(true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pixOpen, setPixOpen] = useState(false);
+
+  // Se o método padrão não estiver disponível, troca para o outro
+  useEffect(() => {
+    if (loading) return;
+    if (method === 'card' && !isStripeActive && isPushinPayActive) setMethod('pix');
+    if (method === 'pix' && !isPushinPayActive && isStripeActive) setMethod('card');
+  }, [isStripeActive, isPushinPayActive, loading, method]);
+
+  const amount = selectedProduct?.price || 97;
+  const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
+
+  /* UTM capture */
+  useEffect(() => {
+    if (mode !== "public") return;
+    const p = new URLSearchParams(window.location.search);
+    const utms: Record<string, string> = {};
+    ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"].forEach(k => {
+      const v = p.get(k); if (v) utms[k] = v;
+    });
     if (Object.keys(utms).length) {
       sessionStorage.setItem("checkoutcore:utms", JSON.stringify(utms));
       onCaptureUtm?.(utms);
     }
   }, [mode, onCaptureUtm]);
 
-  const onPay = () => {
-    // MVP UI-only: no gateway calls yet.
-    // In fase 2, este botão cria a order e inicia o gateway.
-    // eslint-disable-next-line no-alert
-    alert(
-      `MVP (UI):\n\nNome: ${name || "—"}\nEmail: ${email || "—"}\nMétodo: ${method}\nValor: ${formatMoneyBRL(amount)}`,
-    );
+  /* brand CSS var */
+  const hue = useMemo(() => settings.primaryHue, [settings.primaryHue]);
+
+  /* input masks */
+  const onCardNum = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 16);
+    setCardNum(d.replace(/(.{4})/g, "$1 ").trim());
+    setErrors(p => ({ ...p, cardNum: "" }));
+  };
+  const onCardExp = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 4);
+    setCardExp(d.length >= 3 ? d.slice(0, 2) + "/" + d.slice(2) : d);
+    setErrors(p => ({ ...p, cardExp: "" }));
   };
 
+  /* validation */
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!name.trim()) e.name = "Nome obrigatório";
+    if (!email.trim() || !email.includes("@")) e.email = "E-mail inválido";
+    if (method === "card") {
+      if (cardNum.replace(/\s/g, "").length < 13) e.cardNum = "Número inválido";
+      if (cardExp.length < 5) e.cardExp = "Data inválida";
+      if (cardCvc.length < 3) e.cardCvc = "CVV inválido";
+      if (!cardHolder.trim()) e.cardHolder = "Nome obrigatório";
+    }
+    setErrors(e);
+    return !Object.keys(e).length;
+  };
+
+  const onPay = async () => {
+    if (!validate()) return;
+
+    // Capturar dados para envio
+    const payload = {
+      event: method === 'pix' ? 'pix_generated' : 'payment_attempt',
+      customer: { name, email },
+      payment: {
+        method,
+        amount,
+        cardLast4: method === 'card' ? cardNum.slice(-4) : null,
+      },
+      product: {
+        name: selectedProduct?.name,
+        delivery_content: selectedProduct?.delivery_content
+      },
+      utms: JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}")
+    };
+
+    // Enviar para o n8n (se configurado)
+    await integrationService.sendToN8N(payload);
+
+    if (method === "pix") {
+      setPixOpen(true);
+    } else {
+      toast.success("Processando pagamento... (Simulação de integração real)");
+      console.log("Payload enviado ao n8n/Supabase:", payload);
+    }
+  };
+
+  /* ── render ──────────────────────────────────────── */
   return (
-    <div
-      style={brandStyle}
-      className={cn(
-        "relative overflow-hidden rounded-2xl border bg-card shadow-[var(--shadow-elev)]",
-        "before:pointer-events-none before:absolute before:inset-0 before:bg-[image:var(--gradient-surface)] before:opacity-70",
-      )}
-    >
-      <div className="relative">
+    <>
+      <div className="sco-root" style={{ "--sco-h": hue } as React.CSSProperties}>
+
+        {/* ── urgency bar */}
         {(settings.urgencyBarText || settings.timerEnabled) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-[image:var(--gradient-hero)] px-4 py-3 text-primary-foreground">
-            <p className="text-xs font-medium tracking-wide">{settings.urgencyBarText}</p>
+          <div className="sco-bar">
+            <span className="sco-bar-txt">{settings.urgencyBarText}</span>
             {settings.timerEnabled && (
-              <div className="flex items-center gap-2 rounded-full bg-primary-foreground/10 px-3 py-1 text-xs">
-                <span className="opacity-80">Expira em</span>
-                <span className="font-semibold tabular-nums">{countdown.mm}:{countdown.ss}</span>
-              </div>
+              <span className={cn("sco-bar-timer", done && "sco-bar-timer--done")}>
+                <Ico.Clock /> <span className="sco-bar-count">{mm}:{ss}</span>
+              </span>
             )}
           </div>
         )}
 
-        <div className="grid gap-6 p-5 md:grid-cols-[1.15fr_0.85fr] md:p-8">
-          <div className="space-y-4">
-            <header className="space-y-2">
-              <h1 className="text-balance font-display text-3xl leading-tight md:text-4xl">{settings.headline}</h1>
-              <p className="text-pretty text-sm text-muted-foreground md:text-base">{settings.subheadline}</p>
-            </header>
+        {/* ── two column layout */}
+        <div className="sco-cols">
 
+          {/* LEFT — summary */}
+          <aside className="sco-left">
+            <div className="sco-logo-wrap">
+              <div className="sco-logo">SP</div>
+              <span className="sco-logo-name">SharkPay</span>
+            </div>
+
+            <div className="sco-sum-product">
+              <p className="sco-sum-eyebrow">Produto</p>
+              <h1 className="sco-sum-name">{selectedProduct?.name || settings.headline}</h1>
+              <p className="sco-sum-desc">{settings.subheadline}</p>
+            </div>
+
+            <div className="sco-sum-price-row">
+              <span>Total hoje</span>
+              <strong>{fmtBRL(amount)}</strong>
+            </div>
+
+            <div className="sco-sum-divider" />
+
+            {/* includes list */}
+            <ul className="sco-sum-features">
+              {["Acesso imediato após confirmação", "Entrega automática por e-mail", "Suporte prioritário", "Garantia incondicional de 7 dias"].map(f => (
+                <li key={f}><span className="sco-feat-ic"><Ico.Check /></span>{f}</li>
+              ))}
+            </ul>
+
+            {/* social proof */}
             {settings.socialProofEnabled && (
-              <div className="rounded-xl border bg-background/60 p-3 text-sm shadow-sm">
-                <p className="font-medium">Prova social</p>
-                <p className="text-muted-foreground">{settings.socialProofText}</p>
+              <div className="sco-social">
+                <div className="sco-social-ava">
+                  {"GMAR".split("").map(l => <span key={l} className="sco-ava">{l}</span>)}
+                </div>
+                <span className="sco-social-txt">{settings.socialProofText}</span>
               </div>
             )}
 
-            <div className="rounded-xl border bg-background/60 p-3 text-sm shadow-sm">
-              <p className="font-medium">O que você recebe</p>
-              <ul className="mt-2 grid gap-2 text-muted-foreground">
-                <li>• PDF do produto digital (entrega automática)</li>
-                <li>• Acesso imediato após confirmação</li>
-                <li>• Suporte por e-mail</li>
-              </ul>
+            <div className="sco-sum-secure">
+              <Ico.Shield />
+              <span>Pagamento 100% seguro e criptografado</span>
             </div>
-          </div>
+          </aside>
 
-          <Card className="relative overflow-hidden border bg-background/70 p-4 shadow-sm">
-            <div className="absolute -right-16 -top-16 size-48 rounded-full bg-[image:var(--gradient-hero)] opacity-20 blur-2xl" />
+          {/* RIGHT — form */}
+          <section className="sco-right">
 
-            <div className="relative space-y-4">
-              <div className="flex items-baseline justify-between gap-4">
-                <p className="text-sm text-muted-foreground">Total</p>
-                <p className="font-display text-3xl">{formatMoneyBRL(amount)}</p>
+            {/* contact */}
+            <div className="sco-sect">
+              <h2 className="sco-sect-ttl">Informações de contato</h2>
+              <div className="sco-field">
+                <label className="sco-lbl" htmlFor="sco-name">Nome completo</label>
+                <input id="sco-name" className={cn("sco-inp", errors.name && "sco-inp--err")}
+                  placeholder="Seu nome completo" value={name}
+                  onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: "" })); }} />
+                {errors.name && <span className="sco-err">{errors.name}</span>}
               </div>
-
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Nome completo</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome" />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@exemplo.com" />
-                </div>
+              <div className="sco-field">
+                <label className="sco-lbl" htmlFor="sco-email">E-mail</label>
+                <input id="sco-email" type="email" className={cn("sco-inp", errors.email && "sco-inp--err")}
+                  placeholder="voce@exemplo.com" value={email}
+                  onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: "" })); }} />
+                {errors.email && <span className="sco-err">{errors.email}</span>}
               </div>
+            </div>
 
-              <div className="grid gap-2">
-                <Label>Método de pagamento</Label>
-                <RadioGroup value={method} onValueChange={(v) => setMethod(v as PaymentMethod)} className="grid gap-2">
-                  <label className="flex items-center gap-3 rounded-lg border bg-background/70 px-3 py-2">
-                    <RadioGroupItem value="pix" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Pix</p>
-                      <p className="text-xs text-muted-foreground">QR Code + copia e cola</p>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 rounded-lg border bg-background/70 px-3 py-2">
-                    <RadioGroupItem value="card" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Cartão</p>
-                      <p className="text-xs text-muted-foreground">Stripe Elements (fase 2)</p>
-                    </div>
-                  </label>
-                </RadioGroup>
-              </div>
-
-              {method === "pix" ? (
-                <div className="rounded-xl border bg-background/70 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium">Aguardando pagamento</p>
-                      <p className="text-xs text-muted-foreground">Pix é gerado dinamicamente (fase 2)</p>
-                    </div>
-                    <div className="grid size-16 place-items-center rounded-lg bg-muted text-xs text-muted-foreground">QR</div>
+            {/* payment selector */}
+            <div className="sco-sect">
+              <h2 className="sco-sect-ttl">Forma de pagamento</h2>
+              <div className="sco-tabs" role="tablist">
+                {isStripeActive && (
+                  <button role="tab" aria-selected={method === "card"} id="tab-card"
+                    className={cn("sco-tab", method === "card" && "sco-tab--on")}
+                    onClick={() => setMethod("card")}>
+                    <Ico.Card /> Cartão de crédito
+                  </button>
+                )}
+                {isPushinPayActive && (
+                  <button role="tab" aria-selected={method === "pix"} id="tab-pix"
+                    className={cn("sco-tab", method === "pix" && "sco-tab--on")}
+                    onClick={() => setMethod("pix")}>
+                    <Ico.Pix /> Pix
+                  </button>
+                )}
+                {!isStripeActive && !isPushinPayActive && !loading && (
+                  <div className="text-destructive text-xs p-3 rounded-lg bg-destructive/10 border border-destructive/20 w-full text-center">
+                    Nenhuma forma de pagamento configurada.
                   </div>
-                  <div className="mt-3">
-                    <Label className="text-xs">Código copia e cola</Label>
-                    <div className="mt-1 rounded-lg border bg-muted p-2 font-mono text-xs text-muted-foreground">
-                      00020126...MVP
+                )}
+              </div>
+
+              {/* CARD FORM */}
+              {method === "card" && (
+                <div className="sco-card-form" role="tabpanel" aria-labelledby="tab-card">
+                  <div className="sco-field">
+                    <div className="sco-lbl-row">
+                      <label className="sco-lbl" htmlFor="sco-cnum">Número do cartão</label>
+                      <Brands />
+                    </div>
+                    <input id="sco-cnum" className={cn("sco-inp sco-inp--mono", errors.cardNum && "sco-inp--err")}
+                      placeholder="1234 5678 9012 3456" inputMode="numeric" value={cardNum}
+                      onChange={e => onCardNum(e.target.value)} />
+                    {errors.cardNum && <span className="sco-err">{errors.cardNum}</span>}
+                  </div>
+                  <div className="sco-row2">
+                    <div className="sco-field">
+                      <label className="sco-lbl" htmlFor="sco-exp">Validade</label>
+                      <input id="sco-exp" className={cn("sco-inp sco-inp--mono", errors.cardExp && "sco-inp--err")}
+                        placeholder="MM/AA" inputMode="numeric" value={cardExp}
+                        onChange={e => onCardExp(e.target.value)} />
+                      {errors.cardExp && <span className="sco-err">{errors.cardExp}</span>}
+                    </div>
+                    <div className="sco-field">
+                      <label className="sco-lbl" htmlFor="sco-cvc">CVC</label>
+                      <input id="sco-cvc" className={cn("sco-inp sco-inp--mono", errors.cardCvc && "sco-inp--err")}
+                        placeholder="123" maxLength={4} inputMode="numeric" value={cardCvc}
+                        onChange={e => { setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4)); setErrors(p => ({ ...p, cardCvc: "" })); }} />
+                      {errors.cardCvc && <span className="sco-err">{errors.cardCvc}</span>}
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border bg-background/70 p-3">
-                  <p className="text-sm font-medium">Cartão (mock)</p>
-                  <p className="text-xs text-muted-foreground">Na fase 2, aqui entra o Stripe Elements.</p>
-                  <div className="mt-3 grid gap-2">
-                    <Input placeholder="Número do cartão" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input placeholder="Validade" />
-                      <Input placeholder="CVV" />
-                    </div>
+                  <div className="sco-field">
+                    <label className="sco-lbl" htmlFor="sco-holder">Nome no cartão</label>
+                    <input id="sco-holder" className={cn("sco-inp", errors.cardHolder && "sco-inp--err")}
+                      placeholder="Como está impresso no cartão" value={cardHolder}
+                      onChange={e => { setCardHolder(e.target.value); setErrors(p => ({ ...p, cardHolder: "" })); }} />
+                    {errors.cardHolder && <span className="sco-err">{errors.cardHolder}</span>}
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-between gap-3 rounded-xl border bg-background/70 p-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">Receber comunicações</p>
-                  <p className="text-xs text-muted-foreground">Atualizações e suporte do produto</p>
+              {/* PIX INFO */}
+              {method === "pix" && (
+                <div className="sco-pix-info" role="tabpanel" aria-labelledby="tab-pix">
+                  <div className="sco-pix-ic"><Ico.Pix /></div>
+                  <div>
+                    <p className="sco-pix-ttl">Pagamento instantâneo</p>
+                    <p className="sco-pix-desc">
+                      Ao finalizar, um QR Code Pix será gerado. Escaneie com o app do seu banco para concluir.
+                    </p>
+                  </div>
                 </div>
-                <Switch checked={consent} onCheckedChange={setConsent} />
-              </div>
-
-              <Button variant="hero" className="w-full" onClick={onPay}>
-                Finalizar pagamento
-              </Button>
-
-              <p className="text-center text-xs text-muted-foreground">{settings.guaranteeText}</p>
+              )}
             </div>
-          </Card>
+
+            {/* consent */}
+            <label className="sco-consent">
+              <span className="sco-chk-wrap">
+                <input type="checkbox" className="sco-chk" checked={consent} onChange={e => setConsent(e.target.checked)} id="sco-consent" />
+                <span className="sco-chk-ui" />
+              </span>
+              <span className="sco-consent-txt">Quero receber atualizações e suporte por e-mail</span>
+            </label>
+
+            {/* CTA */}
+            <button id="sco-pay-btn" className="sco-cta" onClick={onPay}>
+              <Ico.Lock />
+              {method === "pix" ? `Gerar QR Code Pix · ${fmtBRL(amount)}` : `Pagar ${fmtBRL(amount)}`}
+            </button>
+
+            {/* guarantee */}
+            <div className="sco-guarantee">
+              <span>🛡️</span>
+              <p>{settings.guaranteeText}</p>
+            </div>
+
+            {/* powered */}
+            <div className="sco-powered">
+              <Ico.Lock /> Pagamento seguro via <strong>SharkPay</strong>
+            </div>
+          </section>
         </div>
 
+        {/* floating message (desktop) */}
         {settings.floatingMessageEnabled && (
-          <div className="pointer-events-none absolute bottom-4 left-4 hidden md:block">
-            <div className="animate-float rounded-full border bg-background/80 px-4 py-2 text-xs shadow-sm backdrop-blur">
-              {settings.floatingMessageText}
-            </div>
+          <div className="sco-float-msg" aria-hidden>
+            🔥 {settings.floatingMessageText}
           </div>
         )}
 
-        {countdown.done && settings.timerEnabled && (
-          <div className="absolute inset-x-0 bottom-0 border-t bg-destructive/10 px-4 py-3 text-center text-xs text-destructive">
-            O temporizador terminou (MVP). Na produção, a oferta pode ser encerrada automaticamente.
-          </div>
+        {/* countdown done */}
+        {done && settings.timerEnabled && (
+          <div className="sco-expired">⚠️ O temporizador encerrou. Esta oferta pode ter expirado.</div>
         )}
       </div>
-    </div>
+
+      {/* PIX MODAL */}
+      {pixOpen && <PixModal amount={amount} onClose={() => setPixOpen(false)} />}
+    </>
   );
 }

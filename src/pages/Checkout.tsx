@@ -1,25 +1,28 @@
 import { useMemo } from "react";
 import { CheckoutShell } from "@/components/checkout/CheckoutShell";
 import { defaultCheckoutSettings } from "@/components/checkout/types";
-import { HeroGlow } from "@/components/brand/HeroGlow";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { HeroGlow } from "@/components/brand/HeroGlow";
 
 export default function PublicCheckout() {
   const settings = useMemo(() => defaultCheckoutSettings, []);
 
   return (
-    <main className="min-h-svh bg-[image:var(--gradient-page)] px-4 py-10 md:py-14">
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="mb-3 flex justify-end">
-          <ThemeToggle />
-        </div>
-        <HeroGlow className="rounded-3xl">
-          <CheckoutShell settings={settings} />
-        </HeroGlow>
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          MVP (front-end). Gateways, webhooks, idempotência e entrega automática entram nas fases 2–3.
-        </p>
+    <div className="sco-page relative overflow-hidden">
+      {/* Fundo igual ao da Home */}
+      <div className="absolute inset-0 bg-[image:var(--gradient-page)] pointer-events-none opacity-40 mix-blend-overlay" />
+
+      {/* Top bar flutuante com o toggle de tema */}
+      <div className="sco-page-topbar z-50">
+        <ThemeToggle />
       </div>
-    </main>
+
+      {/* Container principal: checkout direto no background, sem card */}
+      <HeroGlow className="flex-1 flex flex-col">
+        <div className="sco-page-body relative z-10">
+          <CheckoutShell settings={settings} />
+        </div>
+      </HeroGlow>
+    </div>
   );
 }

@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { CheckoutShell } from "@/components/checkout/CheckoutShell";
 import { defaultCheckoutSettings, type CheckoutSettings } from "@/components/checkout/types";
-import { HeroGlow } from "@/components/brand/HeroGlow";
 
 export default function AdminEditor() {
   const [s, setS] = useState<CheckoutSettings>(defaultCheckoutSettings);
@@ -115,10 +114,12 @@ export default function AdminEditor() {
         </Card>
       </div>
 
-      <div>
-        <HeroGlow className="rounded-3xl">
-          <CheckoutShell settings={s} mode="preview" />
-        </HeroGlow>
+      <div className="overflow-hidden rounded-2xl border bg-muted/30">
+        <div className="sco-page h-[600px] overflow-auto scale-90 origin-top -mb-[60px]">
+          <div className="sco-page-body !pt-8">
+            <CheckoutShell settings={s} mode="preview" />
+          </div>
+        </div>
       </div>
     </div>
   );
