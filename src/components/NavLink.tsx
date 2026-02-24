@@ -1,7 +1,4 @@
-'use client'
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -16,13 +13,13 @@ interface NavLinkProps {
 
 const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
   ({ className, activeClassName, to, children, onClick, ...props }, ref) => {
-    const pathname = usePathname();
+    const { pathname } = useLocation();
     const isActive = pathname === to;
 
     return (
       <Link
         ref={ref}
-        href={to}
+        to={to}
         className={cn(className, isActive && activeClassName)}
         onClick={onClick}
         {...props}

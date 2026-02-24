@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -46,8 +46,8 @@ const defaultHtml = `<!doctype html>
 </html>`;
 
 export default function AdminDelivery() {
-  const searchParams = useSearchParams();
-  const productId = searchParams?.get("product") ?? null;
+  const [searchParams] = useSearchParams();
+  const productId = searchParams.get("product") ?? null;
 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
