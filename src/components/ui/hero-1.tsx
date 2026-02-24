@@ -22,7 +22,7 @@ export function HeroSection() {
             )}
           >
             <RocketIcon className="size-3 text-muted-foreground" />
-            <span className="text-xs text-foreground/80">Registre-se agora para testar a demo</span>
+            <span className="text-xs text-foreground/80">Aumente sua taxa de conversão agora</span>
             <span className="block h-5 border-l" />
             <ArrowRightIcon className="size-3 transition-transform duration-150 ease-out group-hover:translate-x-1" />
           </NavLink>
@@ -38,7 +38,7 @@ export function HeroSection() {
             )}
           >
             <RocketIcon className="size-3 text-muted-foreground" />
-            <span className="text-xs text-foreground/80">demo completa do Checkout + Painel</span>
+            <span className="text-xs text-foreground/80">Sua estrutura de alta performance liberada</span>
             <span className="block h-5 border-l" />
             <ArrowRightIcon className="size-3 transition-transform duration-150 ease-out group-hover:translate-x-1" />
           </NavLink>
