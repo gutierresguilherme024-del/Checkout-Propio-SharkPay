@@ -12,6 +12,8 @@ Este documento estabelece as regras para a IA (Antigravity) ao realizar ediçõe
 
 ## 3. Deployment
 - O deployment para Vercel em produção só deve ser realizado sob comando explícito do usuário.
+- **Repositório Oficial**: Todas as atualizações devem ser enviadas exclusivamente para: `https://github.com/gutierresguilherme024-del/Checkout-Propio-SharkPay.git`
+- **Regra Obrigatória**: Sempre que solicitado "colocar em produção", a IA deve garantir que o deploy na Vercel reflita exatamente as últimas melhorias implementadas e validadas no preview. Não deve haver diferença entre o que é visto no ambiente de desenvolvimento/preview e o que é enviado para o repositório de produção.
 - Antes do deploy, a IA deve garantir que o `npm run build` está passando sem erros de TypeScript ou Lint.
 
 ## 4. Estética Visual
