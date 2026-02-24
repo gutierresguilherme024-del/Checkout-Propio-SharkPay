@@ -44,9 +44,8 @@ export const integrationService = {
         const n8nConfigs = await this.getSettings('n8n');
         const webhook = n8nConfigs.find(c => c.id === 'main_webhook' && c.enabled);
 
-        // URL padrão baseada no seu n8n
-        const defaultWebhookUrl = "https://n8n-h0i3.onrender.com/webhook/sharkpay-checkout";
-        const targetUrl = webhook?.config?.url || defaultWebhookUrl;
+        const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+        const targetUrl = webhook?.config?.url || n8nWebhookUrl;
 
         console.log(`Enviando evento para n8n: ${payload.event || 'generic'}`);
 
