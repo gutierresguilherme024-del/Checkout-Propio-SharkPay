@@ -1,7 +1,10 @@
+'use client'
+
 import React, { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 
 // Import images directly from the folder
 import img1 from "./icons integraçoes hero/WhatsApp_Image_2026-02-24_at_01.28.07-removebg-preview.png";
@@ -54,21 +57,25 @@ export function HeroCarousel() {
                     >
                         {/* Background Layer - Blurred for atmosphere */}
                         <div className="absolute inset-0 z-0 overflow-hidden">
-                            <img
+                            <Image
                                 src={images[currentIndex]}
-                                className="w-full h-full object-cover blur-3xl opacity-20 scale-125 select-none"
+                                fill
+                                className="object-cover blur-3xl opacity-20 scale-125 select-none"
                                 alt=""
                             />
                         </div>
 
                         {/* Main Image Layer */}
                         <div className="relative z-10 w-full h-full flex items-center justify-center p-12 md:p-24">
-                            <img
-                                src={images[currentIndex]}
-                                alt={`Slide ${currentIndex + 1}`}
-                                className="max-w-[70%] max-h-[50%] object-contain select-none drop-shadow-[0_0_50px_rgba(255,255,255,0.05)]"
-                                loading={currentIndex === 0 ? "eager" : "lazy"}
-                            />
+                            <div className="relative w-[70%] h-[50%]">
+                                <Image
+                                    src={images[currentIndex]}
+                                    alt={`Slide ${currentIndex + 1}`}
+                                    fill
+                                    className="object-contain select-none drop-shadow-[0_0_50px_rgba(255,255,255,0.05)]"
+                                    priority={currentIndex === 0}
+                                />
+                            </div>
                         </div>
 
 

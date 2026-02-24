@@ -1,13 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     reactStrictMode: true,
-    swcMinify: true,
     images: {
-        domains: [
-            'xxx.supabase.co', // Replace with your supabase domain
-            'files.stripe.com',
+        remotePatterns: [
+            {
+                protocol: 'https',
+                hostname: '**.supabase.co',
+            },
+            {
+                protocol: 'https',
+                hostname: 'files.stripe.com',
+            },
         ],
     },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

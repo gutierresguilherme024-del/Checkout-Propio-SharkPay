@@ -1,5 +1,5 @@
 'use client'
-import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { createSupabaseBrowserClient } from '../../lib/supabase/client.ts'
 import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 
