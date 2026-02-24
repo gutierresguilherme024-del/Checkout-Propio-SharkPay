@@ -1,10 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas')
-}
+// Variáveis de ambiente configuradas diretamente para o deploy na Vercel
+const supabaseUrl = "https://tcthjnpqjlifmuqipwhq.supabase.co"
+const supabaseAnonKey = "sb_publishable_ceqd7Zx2356UV4G30Wvrrg_B3O8DyGh"
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)

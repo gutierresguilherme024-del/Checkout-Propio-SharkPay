@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Package, Plus, Save, Trash2, Mail, FileText, ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase/client";
 
 interface Product {
     id: string;
