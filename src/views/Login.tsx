@@ -4,23 +4,36 @@ import { supabase } from '@/lib/supabase/client'
 
 export default function Login() {
     const navigate = useNavigate()
+    const [isLogin, setIsLogin] = useState(true)
     const [email, setEmail] = useState('')
     const [senha, setSenha] = useState('')
     const [erro, setErro] = useState('')
     const [loading, setLoading] = useState(false)
 
-    async function handleLogin() {
+    async function handleAuth() {
         setLoading(true)
         setErro('')
-        const { error } = await supabase.auth.signInWithPassword({
-            email, password: senha
-        })
-        if (error) {
-            setErro('Email ou senha incorretos.')
+
+        try {
+            if (isLogin) {
+                const { error } = await supabase.auth.signInWithPassword({
+                    email, password: senha
+                })
+                if (error) throw error
+                navigate('/admin/overview')
+            } else {
+                const { error } = await supabase.auth.signUp({
+                    email, password: senha
+                })
+                if (error) throw error
+                setErro('Conta criada! Verifique seu email ou tente fazer login.')
+                setIsLogin(true)
+            }
+        } catch (error: any) {
+            setErro(error.message || 'Erro ao realizar a operação.')
+        } finally {
             setLoading(false)
-            return
         }
-        navigate('/admin/overview')
     }
 
     return (
@@ -32,7 +45,7 @@ export default function Login() {
                     </h1>
                 </div>
                 <h2 className='text-xl font-semibold text-white mb-6 text-center'>
-                    Acesso Administrativo
+                    {isLogin ? 'Acesso Administrativo' : 'Criar Conta'}
                 </h2>
 
                 <div className='space-y-4'>
@@ -55,7 +68,7 @@ export default function Login() {
                             placeholder='••••••••'
                             value={senha}
                             onChange={e => setSenha(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                            onKeyDown={e => e.key === 'Enter' && handleAuth()}
                             className='w-full px-4 py-3 rounded-xl bg-slate-800 text-white
                          border border-slate-700 focus:border-indigo-500
                          focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all'
@@ -63,18 +76,25 @@ export default function Login() {
                     </div>
 
                     {erro && (
-                        <div className='bg-red-500/10 border border-red-500/20 py-2 rounded-lg'>
-                            <p className='text-red-400 text-sm text-center font-medium'>{erro}</p>
+                        <div className='bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg'>
+                            <p className='text-red-400 text-xs text-center font-medium'>{erro}</p>
                         </div>
                     )}
 
                     <button
-                        onClick={handleLogin}
+                        onClick={handleAuth}
                         disabled={loading}
                         className='w-full py-3 mt-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500
                        text-white font-bold shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all disabled:opacity-50'
                     >
-                        {loading ? 'Entrando...' : 'Entrar no Painel'}
+                        {loading ? 'Processando...' : (isLogin ? 'Entrar no Painel' : 'Criar Minha Conta')}
+                    </button>
+
+                    <button
+                        onClick={() => setIsLogin(!isLogin)}
+                        className='w-full text-slate-400 text-sm hover:text-white transition-colors'
+                    >
+                        {isLogin ? 'Não tem conta? Crie uma agora' : 'Já tem conta? Faça login'}
                     </button>
                 </div>
 

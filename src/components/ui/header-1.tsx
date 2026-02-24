@@ -1,17 +1,16 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { NavLink } from "@/components/NavLink";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MenuToggleIcon } from "@/components/ui/menu-toggle-icon";
 import { useScroll } from "@/components/ui/use-scroll";
-
+import { useAuth } from "@/hooks/useAuth";
 
 export function Header() {
   const [open, setOpen] = React.useState(false);
   const scrolled = useScroll(10);
-
-
+  const { session, loading } = useAuth();
 
   React.useEffect(() => {
     if (open) {
@@ -38,16 +37,30 @@ export function Header() {
         </NavLink>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Button asChild variant="outline">
-            <NavLink to="/checkout" onClick={() => setOpen(false)}>
-              Ver checkout
-            </NavLink>
-          </Button>
-          <Button asChild>
-            <NavLink to="/admin/overview" onClick={() => setOpen(false)}>
-              Abrir painel
-            </NavLink>
-          </Button>
+          {!loading && (
+            <>
+              {session ? (
+                <>
+                  <Button asChild variant="outline">
+                    <NavLink to="/checkout/demo" onClick={() => setOpen(false)}>
+                      Ver checkout
+                    </NavLink>
+                  </Button>
+                  <Button asChild>
+                    <NavLink to="/admin/overview" onClick={() => setOpen(false)}>
+                      Abrir painel
+                    </NavLink>
+                  </Button>
+                </>
+              ) : (
+                <Button asChild>
+                  <NavLink to="/login" onClick={() => setOpen(false)}>
+                    Fazer login
+                  </NavLink>
+                </Button>
+              )}
+            </>
+          )}
         </div>
 
         <Button
@@ -64,18 +77,31 @@ export function Header() {
       </nav>
 
       <MobileMenu open={open} className="flex flex-col justify-between gap-2">
-
         <div className="flex flex-col gap-2">
-          <Button asChild variant="outline" className="w-full bg-transparent">
-            <NavLink to="/checkout" onClick={() => setOpen(false)}>
-              Ver checkout
-            </NavLink>
-          </Button>
-          <Button asChild className="w-full">
-            <NavLink to="/admin/overview" onClick={() => setOpen(false)}>
-              Abrir painel
-            </NavLink>
-          </Button>
+          {!loading && (
+            <>
+              {session ? (
+                <>
+                  <Button asChild variant="outline" className="w-full bg-transparent">
+                    <NavLink to="/checkout/demo" onClick={() => setOpen(false)}>
+                      Ver checkout
+                    </NavLink>
+                  </Button>
+                  <Button asChild className="w-full">
+                    <NavLink to="/admin/overview" onClick={() => setOpen(false)}>
+                      Abrir painel
+                    </NavLink>
+                  </Button>
+                </>
+              ) : (
+                <Button asChild className="w-full">
+                  <NavLink to="/login" onClick={() => setOpen(false)}>
+                    Fazer login
+                  </NavLink>
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </MobileMenu>
     </header>
@@ -116,7 +142,6 @@ function MobileMenu({ open, children, className, ...props }: MobileMenuProps) {
 export const WordmarkIcon = (props: React.ComponentProps<"svg">) => (
   <div className={cn("flex items-center gap-2", props.className)}>
     <div className="relative size-8 flex items-center justify-center rounded-lg bg-primary/10 border border-primary/20 shadow-[0_0_15px_rgba(30,210,230,0.15)] overflow-hidden group">
-      {/* Shark Fin Icon */}
       <svg
         viewBox="0 0 24 24"
         fill="none"

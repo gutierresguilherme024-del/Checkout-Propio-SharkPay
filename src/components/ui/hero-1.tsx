@@ -1,28 +1,48 @@
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
-import { ArrowRightIcon, PhoneCallIcon, RocketIcon, Mail, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRightIcon, PhoneCallIcon, RocketIcon, Mail, Zap } from "lucide-react";
 import { InfiniteSlider } from "@/components/ui/infinite-slider";
+import { useAuth } from "@/hooks/useAuth";
 
 export function HeroSection() {
+  const { session, loading } = useAuth();
+
   return (
     <div className="relative w-full">
       {/* Main content */}
       <div className="relative flex flex-col items-center justify-center gap-5 pt-8 md:pt-12">
+        {!loading && !session && (
+          <NavLink
+            to="/login"
+            className={cn(
+              "group mx-auto flex w-fit items-center gap-3 rounded-full border bg-card px-3 py-1 shadow",
+              "animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-200 duration-500 ease-out",
+              "transition-all hover:-translate-y-0.5 hover:shadow-md",
+            )}
+          >
+            <RocketIcon className="size-3 text-muted-foreground" />
+            <span className="text-xs text-foreground/80">Registre-se agora para testar a demo</span>
+            <span className="block h-5 border-l" />
+            <ArrowRightIcon className="size-3 transition-transform duration-150 ease-out group-hover:translate-x-1" />
+          </NavLink>
+        )}
 
-        <NavLink
-          to="/checkout"
-          className={cn(
-            "group mx-auto flex w-fit items-center gap-3 rounded-full border bg-card px-3 py-1 shadow",
-            "animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-200 duration-500 ease-out",
-            "transition-all hover:-translate-y-0.5 hover:shadow-md",
-          )}
-        >
-          <RocketIcon className="size-3 text-muted-foreground" />
-          <span className="text-xs text-foreground/80">demo completa do Checkout + Painel</span>
-          <span className="block h-5 border-l" />
-          <ArrowRightIcon className="size-3 transition-transform duration-150 ease-out group-hover:translate-x-1" />
-        </NavLink>
+        {session && (
+          <NavLink
+            to="/checkout/demo"
+            className={cn(
+              "group mx-auto flex w-fit items-center gap-3 rounded-full border bg-card px-3 py-1 shadow",
+              "animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-200 duration-500 ease-out",
+              "transition-all hover:-translate-y-0.5 hover:shadow-md",
+            )}
+          >
+            <RocketIcon className="size-3 text-muted-foreground" />
+            <span className="text-xs text-foreground/80">demo completa do Checkout + Painel</span>
+            <span className="block h-5 border-l" />
+            <ArrowRightIcon className="size-3 transition-transform duration-150 ease-out group-hover:translate-x-1" />
+          </NavLink>
+        )}
 
         <h1
           className={cn(
@@ -40,18 +60,40 @@ export function HeroSection() {
         </p>
 
         <div className="flex flex-row flex-wrap items-center justify-center gap-3 pt-2 animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-500 duration-500 ease-out">
-          <Button asChild className="rounded-full" size="lg" variant="secondary">
-            <NavLink to="/checkout">
-              <PhoneCallIcon className="mr-2 size-4" />
-              Ver preview do checkout
-            </NavLink>
-          </Button>
-          <Button asChild className="rounded-full" size="lg">
-            <NavLink to="/admin/overview">
-              Abrir painel admin
-              <ArrowRightIcon className="ms-2 size-4" />
-            </NavLink>
-          </Button>
+          {!loading && (
+            <>
+              {session ? (
+                <>
+                  <Button asChild className="rounded-full" size="lg" variant="secondary">
+                    <NavLink to="/checkout/demo">
+                      <PhoneCallIcon className="mr-2 size-4" />
+                      Ver preview do checkout
+                    </NavLink>
+                  </Button>
+                  <Button asChild className="rounded-full" size="lg">
+                    <NavLink to="/admin/overview">
+                      Abrir painel admin
+                      <ArrowRightIcon className="ms-2 size-4" />
+                    </NavLink>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild className="rounded-full px-8" size="lg">
+                    <NavLink to="/login">
+                      Começar agora
+                      <ArrowRightIcon className="ms-2 size-4" />
+                    </NavLink>
+                  </Button>
+                  <Button asChild className="rounded-full px-8" size="lg" variant="outline">
+                    <NavLink to="/login">
+                      Fazer login
+                    </NavLink>
+                  </Button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
