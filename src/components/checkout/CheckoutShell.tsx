@@ -5,6 +5,7 @@ import { integrationService } from "@/lib/integrations";
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { criarPix } from "@/lib/pushinpay";
+import { criarCheckoutStripe } from "@/lib/stripe";
 import type { CheckoutSettings, PaymentMethod } from "./types";
 
 /* ─── formatters ─────────────────────────────────────── */
@@ -244,7 +245,8 @@ export function CheckoutShell({
 
   const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments, getStatus]);
   const isPushinPayActive = useMemo(() => {
-    return getStatus(payments, 'pushinpay') === 'active' || !!import.meta.env.VITE_PUSHINPAY_TOKEN;
+    const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
+    return getStatus(payments, 'pushinpay') === 'active' || (!!token && token !== 'pp_live_placeholder');
   }, [payments, getStatus]);
 
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
@@ -369,8 +371,26 @@ export function CheckoutShell({
         setIsGeneratingPix(false);
       }
     } else {
-      toast.success("Processando pagamento... (Simulação de integração real)");
-      console.log("Payload enviado ao n8n/Supabase:", payload);
+      // Pagamento REAL com Stripe Checkout
+      try {
+        setIsGeneratingPix(true);
+        const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        const { checkout_url } = await criarCheckoutStripe({
+          nome: displayProduct.name,
+          preco: amount,
+          email,
+          pedido_id: pedidoId,
+          checkout_slug: window.location.pathname.split('/checkout/')[1] || ''
+        });
+        // Redirecionar para o Stripe Checkout
+        if (checkout_url) {
+          window.location.href = checkout_url;
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao processar pagamento");
+      } finally {
+        setIsGeneratingPix(false);
+      }
     }
   };
 

@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
 import Index from "./views/Index";
 import Login from "./views/Login";
 import Checkout from "./views/Checkout";
+import Sucesso from "./views/Sucesso";
 import AdminLayout from "./views/admin/AdminLayout";
 import Overview from "./views/admin/Overview";
 import Tracking from "./views/admin/Tracking";
@@ -28,6 +29,7 @@ const App = () => (
                         <Route path="/" element={<Index />} />
                         <Route path="/login" element={<Login />} />
                         <Route path="/checkout/:slug" element={<Checkout />} />
+                        <Route path="/sucesso" element={<Sucesso />} />
 
                         <Route path="/admin" element={
                             <ProtectedRoute>
