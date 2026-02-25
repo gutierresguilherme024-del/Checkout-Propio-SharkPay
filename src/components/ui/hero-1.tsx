@@ -130,6 +130,14 @@ export function LogosSection() {
       icon: <Mail className="size-6 text-white" />,
       bg: "bg-black",
       label: "E-mail"
+    },
+    {
+      name: "MundPay",
+      icon: (
+        <div className="font-sans font-black text-white text-sm">MP</div>
+      ),
+      bg: "bg-zinc-900",
+      label: "Gateway"
     }
   ];
 

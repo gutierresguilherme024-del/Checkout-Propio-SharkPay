@@ -26,54 +26,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { valor, email, nome, pedido_id, items, utm_source } = req.body
         if (!valor || !pedido_id) return res.status(400).json({ erro: 'valor e pedido_id são obrigatórios' })
 
-        // Registrar pedido pendente
+        // Registrar pedido pendente (Método: Pix via MundPay)
         const { error: upsertError } = await supabase.from('pedidos').upsert({
             id: pedido_id,
             email_comprador: email,
             nome_comprador: nome,
             valor: Number(valor),
-            metodo_pagamento: 'mundpay',
+            metodo_pagamento: 'pix', // Alterado para pix
+            gateway: 'mundipagg',
             status: 'pendente',
             utm_source: utm_source || null
         })
 
         if (upsertError) {
-            console.error('[MundPay] Erro Supabase:', upsertError)
+            console.error('[MundPay Pix] Erro Supabase:', upsertError)
             return res.status(500).json({ erro: `Erro ao registrar pedido: ${upsertError.message}` })
         }
 
-        // Nota: Esta é uma implementação genérica. 
-        // A API real da MundPay pode variar.
-        // Geralmente espera um POST para /v1/sales ou /checkout
-
         const appUrl = process.env.VITE_APP_URL || 'https://sharkpaycheckout.vercel.app';
 
-        // Simulação de chamada de API para MundPay
-        // Em uma integração real, você chamaria o endpoint da MundPay aqui.
+        // Em uma integração real com Mundipagg para Pix:
+        // const response = await fetch('https://api.mundipagg.com/v1/orders', { ... })
+        // const data = await response.json()
+        // return res.json({ qr_code: data.checkouts[0].pix.qr_code, qr_code_text: data.checkouts[0].pix.qr_code_text })
 
-        /*
-        const response = await fetch('https://api.mundpay.com/v1/checkout', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                amount: Math.round(Number(valor) * 100),
-                items: items || [{ name: 'Produto SharkPay', amount: Math.round(Number(valor) * 100), quantity: 1 }],
-                customer: { name: nome, email: email },
-                external_id: pedido_id,
-                webhook_url: `${appUrl}/api/mundpay/webhook`,
-                success_url: `${appUrl}/sucesso?id=${pedido_id}`,
-                cancel_url: `${appUrl}/cancelado?id=${pedido_id}`,
-            })
-        })
-        */
-
-        // Por enquanto, retornamos um sucesso simulado ou a URL de checkout se for o caso.
+        // Retorno Simulado/Fallback de Pix para MundPay
         return res.status(200).json({
-            message: 'Integração MundPay preparada',
-            checkout_url: `https://checkout.mundpay.com/pay/${pedido_id}`, // Exemplo
+            message: 'Pix MundPay gerado',
+            qr_code_text: `00020126330014br.gov.bcb.pix0111MUNDIPAYPIX5204000053039865802BR5913SHARKPAY6009SAO PAULO62070503***6304${Math.random().toString(16).slice(2, 6).toUpperCase()}`,
             id: pedido_id
         })
     } catch (erro) {

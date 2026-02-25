@@ -15,17 +15,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
+    const supabase = createClient(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    // Buscar chave no banco (SaaS) ou usar Env (Uso Próprio)
+    let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
+
+    try {
+        const { data: integ } = await supabase
+            .from('integrations')
+            .select('config, enabled')
+            .eq('id', 'stripe')
+            .single()
+
+        if (integ?.enabled && integ.config?.secKey) {
+            stripeKey = integ.config.secKey as string
+        }
+    } catch (e) {
+        console.warn('Usando fallback de chave Stripe do servidor')
+    }
+
     if (!stripeKey || stripeKey.includes('placeholder')) {
         return res.status(500).json({ error: 'STRIPE_SECRET_KEY não configurada ou inválida.' })
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: '2025-01-27' as any })
-
-    const supabase = createClient(
-        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
-    )
 
     try {
         const { nome, preco, email, pedido_id, checkout_slug, utm_source } = req.body

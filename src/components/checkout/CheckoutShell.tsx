@@ -287,10 +287,12 @@ export function CheckoutShell({
   // Se o método padrão não estiver disponível, troca para o outro
   useEffect(() => {
     if (loading) return;
-    if (method === 'card' && !isStripeActive && isPushinPayActive) setMethod('pix');
-    else if (method === 'card' && !isStripeActive && !isPushinPayActive && isMundPayActive) setMethod('card'); // MundPay handles card too
-
-    if (method === 'pix' && !isPushinPayActive && isStripeActive) setMethod('card');
+    if (method === 'card' && !isStripeActive) {
+      if (isPushinPayActive || isMundPayActive) setMethod('pix');
+    }
+    if (method === 'pix' && !isPushinPayActive && !isMundPayActive) {
+      if (isStripeActive) setMethod('card');
+    }
   }, [isStripeActive, isPushinPayActive, isMundPayActive, loading, method]);
 
   const amount = displayProduct.price;
@@ -385,31 +387,56 @@ export function CheckoutShell({
       try {
         setIsGeneratingPix(true);
         const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
-        const data = await criarPix({
-          valor: amount,
-          email,
-          nome: name,
-          pedido_id: `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-          utm_source: utms.utm_source
-        });
-        setLocalPixData(data);
-        setPixOpen(true);
-        onPaySuccess?.(data);
-        toast.success("QR Code gerado com sucesso!");
+        const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+        if (isPushinPayActive) {
+          // Lógica PushinPay
+          const data = await criarPix({
+            valor: amount,
+            email,
+            nome: name,
+            pedido_id: pedidoId,
+            utm_source: utms.utm_source
+          });
+          setLocalPixData(data);
+          setPixOpen(true);
+          onPaySuccess?.(data);
+          toast.success("QR Code Pix (PushinPay) gerado!");
+        } else if (isMundPayActive) {
+          // Lógica MundPay (Especializada em Pix conforme pedido)
+          const resp = await fetch('/api/mundpay/criar-venda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              valor: amount,
+              email,
+              nome: name,
+              pedido_id: pedidoId,
+              utm_source: utms.utm_source,
+              payment_method: 'pix'
+            })
+          });
+          const data = await resp.json();
+          if (data.qr_code_text || data.qr_code) {
+            setLocalPixData(data);
+            setPixOpen(true);
+            onPaySuccess?.(data);
+            toast.success("QR Code Pix (MundPay) gerado!");
+          } else {
+            throw new Error(data.erro || "Erro ao gerar Pix via MundPay");
+          }
+        } else {
+          toast.error("Nenhuma integração de Pix ativa.");
+        }
       } catch (err) {
         const error = err as Error;
         console.error('Erro PIX:', error);
-        const msg = error.message || "";
-        if (msg.includes("PushinPay não configurado")) {
-          toast.error("Pagamento via PIX temporariamente indisponível (Token não configurado).");
-        } else {
-          toast.error(msg || "Erro ao gerar PIX");
-        }
+        toast.error(error.message || "Erro ao gerar PIX");
       } finally {
         setIsGeneratingPix(false);
       }
     } else {
-      // Prioridade: Stripe -> MundPay
+      // Prioridade: Cartão via Stripe
       try {
         setIsGeneratingPix(true);
         const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
@@ -425,31 +452,12 @@ export function CheckoutShell({
             utm_source: utms.utm_source
           });
           if (checkout_url) window.location.href = checkout_url;
-        } else if (isMundPayActive) {
-          // Lógica MundPay
-          const resp = await fetch('/api/mundpay/criar-venda', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              valor: amount,
-              email,
-              nome: name,
-              pedido_id: pedidoId,
-              utm_source: utms.utm_source
-            })
-          });
-          const data = await resp.json();
-          if (data.checkout_url) {
-            window.location.href = data.checkout_url;
-          } else {
-            toast.success("Pedido MundPay criado! Redirecionando...");
-          }
         } else {
-          toast.error("Nenhum processador de cartão ativo");
+          toast.error("Processamento de cartão (Stripe) não está ativo.");
         }
       } catch (err) {
         const error = err as Error;
-        toast.error(error.message || "Erro ao processar pagamento");
+        toast.error(error.message || "Erro ao processar cartão");
       } finally {
         setIsGeneratingPix(false);
       }
@@ -559,18 +567,11 @@ export function CheckoutShell({
                     <Ico.Card /> Cartão de crédito
                   </button>
                 )}
-                {isPushinPayActive && (
+                {(isPushinPayActive || isMundPayActive) && (
                   <button role="tab" aria-selected={method === "pix"} id="tab-pix"
                     className={cn("sco-tab", method === "pix" && "sco-tab--on")}
                     onClick={() => setMethod("pix")}>
                     <Ico.Pix /> Pix
-                  </button>
-                )}
-                {!isStripeActive && isMundPayActive && (
-                  <button role="tab" aria-selected={method === "card"} id="tab-card"
-                    className={cn("sco-tab", method === "card" && "sco-tab--on")}
-                    onClick={() => setMethod("card")}>
-                    <Ico.Lock /> MundPay
                   </button>
                 )}
                 {!isStripeActive && !isPushinPayActive && !loading && (

@@ -8,16 +8,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido' })
 
-    const token = process.env.PUSHINPAY_TOKEN || process.env.VITE_PUSHINPAY_TOKEN
+    const supabase = createClient(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    // Buscar token no banco (SaaS) ou usar Env (Uso Próprio)
+    let token = process.env.PUSHINPAY_TOKEN || process.env.VITE_PUSHINPAY_TOKEN
+
+    try {
+        const { data: integ } = await supabase
+            .from('integrations')
+            .select('config, enabled')
+            .eq('id', 'pushinpay')
+            .single()
+
+        if (integ?.enabled && integ.config?.apiToken) {
+            token = integ.config.apiToken as string
+        }
+    } catch (e) {
+        console.warn('Usando fallback de token PushinPay do servidor')
+    }
+
     if (!token || token.length < 10 || token.includes('placeholder')) {
         return res.status(500).json({ erro: 'PushinPay Token não configurado ou inválido (placeholder)' })
     }
 
     try {
-        const supabase = createClient(
-            process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-            process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
-        )
 
         const { valor, email, nome, pedido_id } = req.body
         if (!valor || !pedido_id) return res.status(400).json({ erro: 'valor e pedido_id são obrigatórios' })

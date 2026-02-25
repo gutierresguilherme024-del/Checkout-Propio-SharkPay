@@ -121,10 +121,46 @@ export default function AdminPayments() {
       const states: Record<string, boolean> = { ...activeStates };
       const values: Record<string, any> = {};
 
+      // 1. Carregar valores do banco
       payments.forEach(item => {
         states[item.id] = item.enabled;
         values[item.id] = item.config;
       });
+
+      // 2. Pre-fill com chaves do .env para o login do dono (Uso Próprio)
+      let prefilled = false;
+      const stripeSecret = import.meta.env.VITE_STRIPE_SECRET_KEY || "";
+      const pushinpayToken = import.meta.env.VITE_PUSHINPAY_TOKEN || "";
+
+      if (!values.stripe || !values.stripe.pubKey) {
+        values.stripe = {
+          pubKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "",
+          secKey: stripeSecret,
+          webhookSecret: import.meta.env.VITE_STRIPE_WEBHOOK_SECRET || ""
+        };
+        if (values.stripe.pubKey) prefilled = true;
+      }
+
+      if (!values.pushinpay || !values.pushinpay.apiToken) {
+        const token = pushinpayToken.includes('placeholder') ? "" : pushinpayToken;
+        values.pushinpay = {
+          apiToken: token,
+          webhookToken: ""
+        };
+        if (token) prefilled = true;
+      }
+
+      if (prefilled) {
+        console.log("SharkPay: Integrações pré-preenchidas com dados do servidor.");
+      }
+
+      // MundPay (Fallback configurado no Agente)
+      if (!values.mundpay) {
+        values.mundpay = {
+          apiToken: "",
+          webhookSecret: ""
+        };
+      }
 
       setActiveStates(states);
       setConfigValues(values);
