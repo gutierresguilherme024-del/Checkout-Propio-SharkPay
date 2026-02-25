@@ -44,6 +44,16 @@ async function seedIntegrations() {
             }
         },
         {
+            id: 'mundpay',
+            type: 'payment',
+            name: 'MundPay',
+            enabled: !!env['VITE_MUNDPAY_API_TOKEN'],
+            config: {
+                apiToken: env['VITE_MUNDPAY_API_TOKEN'] || '',
+                webhookSecret: env['VITE_MUNDPAY_WEBHOOK_SECRET'] || ''
+            }
+        },
+        {
             id: 'n8n',
             type: 'n8n',
             name: 'Automação Principal',

@@ -24,24 +24,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
 
     try {
-        const { data: integ } = await supabase
+        const { data: integ, error: dbError } = await supabase
             .from('integrations')
             .select('config, enabled')
             .eq('id', 'stripe')
             .single()
 
-        if (integ?.enabled && integ.config?.secKey) {
+        if (!dbError && integ?.enabled && integ.config?.secKey) {
             stripeKey = integ.config.secKey as string
+            console.log('[Stripe] Usando chave configurada no banco de dados.')
         }
     } catch (e) {
-        console.warn('Usando fallback de chave Stripe do servidor')
+        console.warn('[Stripe] Erro ao buscar no banco, usando Env de fallback')
     }
 
-    if (!stripeKey || stripeKey.includes('placeholder')) {
-        return res.status(500).json({ error: 'STRIPE_SECRET_KEY não configurada ou inválida.' })
+    // Validação final da chave
+    const isPlaceholder = !stripeKey ||
+        stripeKey === 'sk_live_placeholder' ||
+        stripeKey === 'sk_test_placeholder' ||
+        stripeKey.includes('placeholder');
+
+    if (isPlaceholder) {
+        console.error('[Stripe] Erro: Chave secreta não configurada ou é placeholder.')
+        return res.status(500).json({ error: 'STRIPE_SECRET_KEY não configurada. Configure em Admin -> Pagamentos.' })
     }
 
-    const stripe = new Stripe(stripeKey, { apiVersion: '2025-01-27' as any })
+    const stripe = new Stripe(stripeKey as string, { apiVersion: '2025-01-27' as any })
 
     try {
         const { nome, preco, email, pedido_id, checkout_slug, utm_source } = req.body

@@ -261,12 +261,23 @@ export function CheckoutShell({
 
   /* product display data */
   const displayProduct = useMemo(() => {
-    if (product) return product;
+    let img = product?.image_url;
+
+    // Normalizar URL da imagem se for apenas um path do Supabase
+    if (img && !img.startsWith('http') && !img.startsWith('data:')) {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (supabaseUrl) {
+        img = `${supabaseUrl}/storage/v1/object/public/produtos-pdf/${img}`;
+      }
+    }
+
+    if (product) return { ...product, image_url: img };
 
     // Fallback apenas para preview do editor se nenhum produto for passado
     return {
       name: settings.headline || "Produto SharkPay",
       price: 97,
+      image_url: null,
       delivery_content: "Obrigado por sua compra!"
     };
   }, [product, settings.headline]);

@@ -80,7 +80,6 @@ export default function PublicCheckout() {
               <span>Home</span>
             </NavLink>
           </Button>
-          <ThemeToggle />
         </div>
         <HeroGlow className="flex-1 flex flex-col">
           <div className="sco-page-body relative z-10">
@@ -132,7 +131,6 @@ export default function PublicCheckout() {
             <span>Home</span>
           </NavLink>
         </Button>
-        <ThemeToggle />
       </div>
 
       <HeroGlow className="flex-1 flex flex-col">

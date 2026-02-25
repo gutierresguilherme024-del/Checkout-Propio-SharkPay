@@ -256,7 +256,7 @@ export default function AdminProducts() {
             if (imageFile) {
                 toast.info("Enviando imagem...");
                 const uploadResult = await apiUploadArquivo(imageFile);
-                imagem_url = uploadResult.path;
+                imagem_url = uploadResult.url;
             }
 
             if (pdfFile) {

@@ -33,7 +33,13 @@ export function useIntegrations() {
         }
         if (id === 'pushinpay') {
             const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
+            const hasKey = (item.config.apiToken && !String(item.config.apiToken).includes('placeholder')) || (envKey && !envKey.includes('placeholder'));
+            // Permitir 'active' se habilitado e tiver qualquer coisa, mas marcar como pending se for placeholder
             return (item.config.apiToken || envKey) ? "active" : "pending";
+        }
+        if (id === 'mundpay') {
+            const envToken = import.meta.env.VITE_MUNDPAY_API_TOKEN;
+            return (item.config.apiToken || envToken) ? "active" : "pending";
         }
 
         return "active";
