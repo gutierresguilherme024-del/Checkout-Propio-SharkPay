@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Package, Plus, Save, Trash2, Mail, FileText, ImageIcon, Loader2 } from "lucide-react";
+import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 
@@ -18,6 +18,8 @@ interface Product {
     pdf_storage_key: string | null;
     ativo: boolean;
     criado_em?: string;
+    stripe_product_id?: string;
+    stripe_price_id?: string;
 }
 
 export default function AdminProducts() {
@@ -25,6 +27,8 @@ export default function AdminProducts() {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
+    const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     const [nome, setNome] = useState("");
     const [preco, setPreco] = useState("");
@@ -36,6 +40,23 @@ export default function AdminProducts() {
     useEffect(() => {
         fetchProducts();
     }, []);
+
+    async function criarProdutoNoStripe(nome: string, preco: number, descricao: string) {
+        try {
+            const response = await fetch('/api/stripe/criar-produto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome, preco, descricao })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erro ao criar no Stripe');
+            return data;
+        } catch (error: any) {
+            console.error("Erro no Stripe:", error);
+            toast.error("Erro ao sincronizar com Stripe. O produto foi salvo apenas localmente.");
+            return null;
+        }
+    }
 
     async function fetchProducts() {
         try {
@@ -73,6 +94,7 @@ export default function AdminProducts() {
         }
 
         setIsSaving(true);
+        setCheckoutUrl(null);
         try {
             let imagem_url: string | null = null;
             let pdf_storage_key: string | null = null;
@@ -85,6 +107,9 @@ export default function AdminProducts() {
                 pdf_storage_key = await uploadFile(pdfFile, 'produtos-pdf');
             }
 
+            // Sincronizar com Stripe
+            const stripeData = await criarProdutoNoStripe(nome, parseFloat(preco), descricao);
+
             const productData = {
                 nome,
                 preco: parseFloat(preco),
@@ -92,6 +117,8 @@ export default function AdminProducts() {
                 ativo,
                 imagem_url,
                 pdf_storage_key,
+                stripe_product_id: stripeData?.stripe_product_id,
+                stripe_price_id: stripeData?.stripe_price_id,
                 atualizado_em: new Date().toISOString()
             };
 
@@ -102,9 +129,15 @@ export default function AdminProducts() {
 
             if (error) throw error;
 
+            if (stripeData?.checkout_url) {
+                setCheckoutUrl(stripeData.checkout_url);
+                toast.success("Produto criado e sincronizado com Stripe! Copie o link abaixo.");
+            } else {
+                toast.success("Produto criado com sucesso!");
+                resetForm();
+            }
+
             setProducts([data, ...products]);
-            toast.success("Produto criado com sucesso!");
-            resetForm();
         } catch (err: any) {
             console.error("Erro ao salvar produto:", err);
             toast.error(`Erro ao salvar produto: ${err.message || 'Erro desconhecido'}`);
@@ -121,19 +154,16 @@ export default function AdminProducts() {
         setImageFile(null);
         setPdfFile(null);
         setIsAdding(false);
+        setCheckoutUrl(null);
+        setCopied(false);
     }
 
     async function handleDelete(id: string, pdfKey: string | null, imgUrl: string | null) {
         if (!confirm("Tem certeza que deseja excluir este produto?")) return;
 
         try {
-            // Delete files from storage
-            if (pdfKey) {
-                await supabase.storage.from('produtos-pdf').remove([pdfKey]);
-            }
-            if (imgUrl) {
-                await supabase.storage.from('produtos-pdf').remove([imgUrl]);
-            }
+            if (pdfKey) await supabase.storage.from('produtos-pdf').remove([pdfKey]);
+            if (imgUrl) await supabase.storage.from('produtos-pdf').remove([imgUrl]);
 
             const { error } = await (supabase.from('produtos') as any)
                 .delete()
@@ -149,6 +179,15 @@ export default function AdminProducts() {
         }
     }
 
+    const copyToClipboard = () => {
+        if (checkoutUrl) {
+            navigator.clipboard.writeText(checkoutUrl);
+            setCopied(true);
+            toast.success("Link copiado!");
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -156,12 +195,45 @@ export default function AdminProducts() {
                     <h2 className="text-3xl font-bold tracking-tight">Produtos Digitais</h2>
                     <p className="text-muted-foreground">Cadastre seus e-books e produtos com entrega automática.</p>
                 </div>
-                {!isAdding && (
+                {!isAdding && !checkoutUrl && (
                     <Button onClick={() => setIsAdding(true)} className="gap-2">
                         <Plus className="size-4" /> Novo Produto
                     </Button>
                 )}
             </div>
+
+            {checkoutUrl && (
+                <div className="mt-4 p-6 bg-slate-900 border border-indigo-500/30 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-indigo-500/10 p-2 rounded-lg">
+                            <Package className="size-5 text-indigo-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-white">Link de Checkout Gerado!</h3>
+                            <p className="text-sm text-slate-400">Use este link para vender seu produto diretamente pelo Stripe.</p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-slate-950 p-4 rounded-lg border border-slate-800">
+                        <span className="text-sm text-slate-300 truncate flex-1 font-mono">{checkoutUrl}</span>
+                        <Button
+                            onClick={copyToClipboard}
+                            variant={copied ? "outline" : "default"}
+                            className="gap-2 transition-all"
+                            size="sm"
+                        >
+                            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                            {copied ? "Copiado!" : "Copiar Link"}
+                        </Button>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                        <Button variant="ghost" onClick={resetForm} size="sm">
+                            Criar outro produto
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {isAdding && (
                 <Card className="border-primary/20 shadow-lg">
@@ -224,7 +296,7 @@ export default function AdminProducts() {
                             <Button variant="outline" onClick={resetForm} disabled={isSaving}>Cancelar</Button>
                             <Button onClick={handleSave} disabled={isSaving} className="gap-2 min-w-[120px]">
                                 {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                                Salvar Produto
+                                Salvar e Sincronizar
                             </Button>
                         </div>
                     </CardContent>
@@ -276,9 +348,16 @@ export default function AdminProducts() {
                                     </div>
                                     <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
                                         <span>Criado em: {product.criado_em ? new Date(product.criado_em).toLocaleDateString() : '-'}</span>
-                                        <Button variant="link" className="h-auto p-0 text-[10px]" asChild>
-                                            <a href={`/admin/delivery?product=${product.id}`}>Configurar Entrega</a>
-                                        </Button>
+                                        <div className="flex gap-2">
+                                            {product.stripe_product_id && (
+                                                <div className="flex items-center gap-1 text-green-500 font-bold">
+                                                    <Check className="size-3" /> Stripe
+                                                </div>
+                                            )}
+                                            <Button variant="link" className="h-auto p-0 text-[10px]" asChild>
+                                                <a href={`/admin/delivery?product=${product.id}`}>Entrega</a>
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>
