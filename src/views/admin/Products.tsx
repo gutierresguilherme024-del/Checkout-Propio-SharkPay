@@ -7,14 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
-import { createClient } from "@supabase/supabase-js";
-
-// Cliente admin com service_role para uploads sem necessidade de RLS
-const supabaseAdmin = createClient(
-    import.meta.env.VITE_SUPABASE_URL || 'https://tcthjnpqjlifmuqipwhq.supabase.co',
-    import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
-);
 
 interface Product {
     id: string;
@@ -27,6 +19,81 @@ interface Product {
     criado_em?: string;
     stripe_product_id?: string;
     stripe_price_id?: string;
+}
+
+// Funções de API — chamam o backend serverless (service_role key fica no servidor)
+async function apiListarProdutos(): Promise<Product[]> {
+    const res = await fetch('/api/produtos');
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao listar produtos');
+    }
+    const data = await res.json();
+    return data.produtos || [];
+}
+
+async function apiCriarProduto(produto: Omit<Product, 'id' | 'criado_em'>): Promise<Product> {
+    const res = await fetch('/api/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(produto)
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao criar produto');
+    }
+    const data = await res.json();
+    return data.produto;
+}
+
+async function apiExcluirProduto(id: string): Promise<void> {
+    const res = await fetch(`/api/produtos?id=${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao excluir produto');
+    }
+}
+
+async function apiUploadArquivo(file: File): Promise<{ path: string; url: string }> {
+    // Converter arquivo para base64
+    const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
+    const res = await fetch('/api/produtos/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            base64,
+            mimeType: file.type,
+            fileName: file.name
+        })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Erro no upload' }));
+        throw new Error(err.error || 'Erro ao fazer upload');
+    }
+    return res.json();
+}
+
+
+async function criarProdutoNoStripe(nome: string, preco: number, descricao: string) {
+    try {
+        const response = await fetch('/api/stripe/criar-produto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, preco, descricao })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Erro ao criar no Stripe');
+        return data;
+    } catch (error: any) {
+        console.warn("Aviso Stripe:", error.message);
+        return null;
+    }
 }
 
 export default function AdminProducts() {
@@ -48,50 +115,17 @@ export default function AdminProducts() {
         fetchProducts();
     }, []);
 
-    async function criarProdutoNoStripe(nome: string, preco: number, descricao: string) {
-        try {
-            const response = await fetch('/api/stripe/criar-produto', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nome, preco, descricao })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Erro ao criar no Stripe');
-            return data;
-        } catch (error: any) {
-            console.error("Erro no Stripe:", error);
-            toast.error("Erro ao sincronizar com Stripe. O produto foi salvo apenas localmente.");
-            return null;
-        }
-    }
-
     async function fetchProducts() {
+        setLoading(true);
         try {
-            const { data, error } = await (supabase.from('produtos') as any)
-                .select('*')
-                .order('criado_em', { ascending: false });
-
-            if (error) throw error;
-            setProducts(data || []);
+            const data = await apiListarProdutos();
+            setProducts(data);
         } catch (err: any) {
             console.error("Erro ao buscar produtos:", err);
-            toast.error("Erro ao carregar produtos do banco de dados.");
+            toast.error("Erro ao carregar produtos: " + (err.message || 'Tente novamente'));
         } finally {
             setLoading(false);
         }
-    }
-
-    async function uploadFile(file: File, bucket: string) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${crypto.randomUUID()}_${Date.now()}.${fileExt}`;
-
-        // Usa o cliente admin (service_role) para bypass de RLS no storage
-        const { error: uploadError, data } = await supabaseAdmin.storage
-            .from(bucket)
-            .upload(fileName, file, { upsert: true });
-
-        if (uploadError) throw uploadError;
-        return data.path;
     }
 
     async function handleSave() {
@@ -100,58 +134,50 @@ export default function AdminProducts() {
             return;
         }
 
-        // Verificar sessão antes de inserir (exigido pelas políticas de RLS)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            toast.error('Você precisa estar logado para cadastrar produtos');
-            return;
-        }
-
         setIsSaving(true);
         setCheckoutUrl(null);
+
         try {
             let imagem_url: string | null = null;
             let pdf_storage_key: string | null = null;
 
+            // Upload via API serverless (usa service_role no backend)
             if (imageFile) {
-                imagem_url = await uploadFile(imageFile, 'produtos-pdf');
+                toast.info("Enviando imagem...");
+                const uploadResult = await apiUploadArquivo(imageFile);
+                imagem_url = uploadResult.path;
             }
 
             if (pdfFile) {
-                pdf_storage_key = await uploadFile(pdfFile, 'produtos-pdf');
+                toast.info("Enviando PDF...");
+                const uploadResult = await apiUploadArquivo(pdfFile);
+                pdf_storage_key = uploadResult.path;
             }
 
-            // Sincronizar com Stripe
+            // Sincronizar com Stripe (opcional — não bloqueia se falhar)
             const stripeData = await criarProdutoNoStripe(nome, parseFloat(preco), descricao);
 
-            const productData = {
+            // Criar produto via API serverless (bypass de RLS com service_role)
+            const novoProduto = await apiCriarProduto({
                 nome,
                 preco: parseFloat(preco),
                 descricao,
                 ativo,
                 imagem_url,
                 pdf_storage_key,
-                stripe_product_id: stripeData?.stripe_product_id,
-                stripe_price_id: stripeData?.stripe_price_id,
-                atualizado_em: new Date().toISOString()
-            };
-
-            const { data, error } = await (supabase.from('produtos') as any)
-                .insert([productData])
-                .select()
-                .single();
-
-            if (error) throw error;
+                stripe_product_id: stripeData?.stripe_product_id || null,
+                stripe_price_id: stripeData?.stripe_price_id || null,
+            });
 
             if (stripeData?.checkout_url) {
                 setCheckoutUrl(stripeData.checkout_url);
-                toast.success("Produto criado e sincronizado com Stripe! Copie o link abaixo.");
+                toast.success("Produto criado e sincronizado com Stripe!");
             } else {
                 toast.success("Produto criado com sucesso!");
                 resetForm();
             }
 
-            setProducts([data, ...products]);
+            setProducts(prev => [novoProduto, ...prev]);
         } catch (err: any) {
             console.error("Erro ao salvar produto:", err);
             toast.error(`Erro ao salvar produto: ${err.message || 'Erro desconhecido'}`);
@@ -172,24 +198,16 @@ export default function AdminProducts() {
         setCopied(false);
     }
 
-    async function handleDelete(id: string, pdfKey: string | null, imgUrl: string | null) {
+    async function handleDelete(id: string) {
         if (!confirm("Tem certeza que deseja excluir este produto?")) return;
 
         try {
-            if (pdfKey) await supabaseAdmin.storage.from('produtos-pdf').remove([pdfKey]);
-            if (imgUrl) await supabaseAdmin.storage.from('produtos-pdf').remove([imgUrl]);
-
-            const { error } = await (supabase.from('produtos') as any)
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
-            setProducts(products.filter(p => p.id !== id));
+            await apiExcluirProduto(id);
+            setProducts(prev => prev.filter(p => p.id !== id));
             toast.success("Produto excluído com sucesso");
         } catch (err: any) {
             console.error("Erro ao excluir produto:", err);
-            toast.error("Erro ao excluir produto");
+            toast.error("Erro ao excluir produto: " + (err.message || ''));
         }
     }
 
@@ -227,7 +245,6 @@ export default function AdminProducts() {
                             <p className="text-sm text-slate-400">Use este link para vender seu produto diretamente pelo Stripe.</p>
                         </div>
                     </div>
-
                     <div className="flex items-center gap-3 bg-slate-950 p-4 rounded-lg border border-slate-800">
                         <span className="text-sm text-slate-300 truncate flex-1 font-mono">{checkoutUrl}</span>
                         <Button
@@ -240,7 +257,6 @@ export default function AdminProducts() {
                             {copied ? "Copiado!" : "Copiar Link"}
                         </Button>
                     </div>
-
                     <div className="mt-4 flex justify-end">
                         <Button variant="ghost" onClick={resetForm} size="sm">
                             Criar outro produto
@@ -287,7 +303,7 @@ export default function AdminProducts() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="arquivo_pdf">Arquivo PDF (Obrigatório para entrega)</Label>
+                                <Label htmlFor="arquivo_pdf">Arquivo PDF (Opcional)</Label>
                                 <div className="flex items-center gap-2">
                                     <Input
                                         id="arquivo_pdf"
@@ -310,7 +326,7 @@ export default function AdminProducts() {
                             <Button variant="outline" onClick={resetForm} disabled={isSaving}>Cancelar</Button>
                             <Button onClick={handleSave} disabled={isSaving} className="gap-2 min-w-[120px]">
                                 {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                                Salvar e Sincronizar
+                                Salvar Produto
                             </Button>
                         </div>
                     </CardContent>
@@ -340,7 +356,7 @@ export default function AdminProducts() {
                                         <Package className="size-5" />
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id, product.pdf_storage_key, product.imagem_url)} className="text-destructive h-8 w-8">
+                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} className="text-destructive h-8 w-8">
                                             <Trash2 className="size-4" />
                                         </Button>
                                     </div>
@@ -368,9 +384,6 @@ export default function AdminProducts() {
                                                     <Check className="size-3" /> Stripe
                                                 </div>
                                             )}
-                                            <Button variant="link" className="h-auto p-0 text-[10px]" asChild>
-                                                <a href={`/admin/delivery?product=${product.id}`}>Entrega</a>
-                                            </Button>
                                         </div>
                                     </div>
                                 </div>
