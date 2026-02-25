@@ -37,15 +37,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const appUrl = process.env.VITE_APP_URL || 'https://sharkpaycheckout.vercel.app'
 
         // 1. Registrar pedido no Supabase
-        await supabase.from('pedidos').insert({
+        const { error: insertError } = await supabase.from('pedidos').insert({
             id: pedido_id,
-            email,
-            nome: nome || 'Cliente',
+            email_comprador: email,
+            nome_comprador: nome || 'Cliente',
             valor: preco,
-            metodo: 'card',
+            metodo_pagamento: 'card',
             status: 'pendente',
             utm_source: utm_source || null
         })
+
+        if (insertError) {
+            console.error('[Stripe] Erro Supabase:', insertError)
+            return res.status(500).json({ error: `Erro ao registrar pedido: ${insertError.message}` })
+        }
 
         // 2. Criar Checkout Session
         const session = await stripe.checkout.sessions.create({

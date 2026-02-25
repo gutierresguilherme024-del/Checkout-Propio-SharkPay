@@ -23,18 +23,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
         )
 
-        const { valor, email, nome, pedido_id, items } = req.body
+        const { valor, email, nome, pedido_id, items, utm_source } = req.body
         if (!valor || !pedido_id) return res.status(400).json({ erro: 'valor e pedido_id são obrigatórios' })
 
         // Registrar pedido pendente
-        await supabase.from('pedidos').upsert({
+        const { error: upsertError } = await supabase.from('pedidos').upsert({
             id: pedido_id,
-            email,
-            nome,
+            email_comprador: email,
+            nome_comprador: nome,
             valor: Number(valor),
-            metodo: 'mundpay',
-            status: 'pendente'
+            metodo_pagamento: 'mundpay',
+            status: 'pendente',
+            utm_source: utm_source || null
         })
+
+        if (upsertError) {
+            console.error('[MundPay] Erro Supabase:', upsertError)
+            return res.status(500).json({ erro: `Erro ao registrar pedido: ${upsertError.message}` })
+        }
 
         // Nota: Esta é uma implementação genérica. 
         // A API real da MundPay pode variar.

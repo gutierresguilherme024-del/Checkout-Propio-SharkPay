@@ -22,10 +22,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { valor, email, nome, pedido_id } = req.body
         if (!valor || !pedido_id) return res.status(400).json({ erro: 'valor e pedido_id são obrigatórios' })
 
-        await supabase.from('pedidos').insert({
-            id: pedido_id, email, nome,
-            valor: Number(valor), metodo: 'pix', status: 'pendente'
+        const { error: insertError } = await supabase.from('pedidos').insert({
+            id: pedido_id,
+            email_comprador: email,
+            nome_comprador: nome,
+            valor: Number(valor),
+            metodo_pagamento: 'pix',
+            status: 'pendente'
         })
+
+        if (insertError) {
+            console.error('[PushinPay] Erro Supabase:', insertError)
+            return res.status(500).json({ erro: `Erro ao registrar pedido: ${insertError.message}` })
+        }
 
         const appUrl = process.env.VITE_APP_URL || 'https://sharkpaycheckout.vercel.app';
         const response = await fetch('https://api.pushinpay.com.br/api/pix/cashIn', {
