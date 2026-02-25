@@ -272,19 +272,40 @@ function IntegrationCard({
       {/* Logo */}
       <div className="flex items-start justify-between">
         <div className="h-12 w-12 overflow-hidden rounded-xl shadow-sm">{icon}</div>
-        <span
-          className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isActive
-            ? "bg-emerald-500/15 text-emerald-400"
-            : "bg-muted text-muted-foreground"
-            }`}
-        >
-          {isActive ? (
-            <CheckCircle2 className="h-3 w-3" />
-          ) : (
-            <AlertCircle className="h-3 w-3" />
-          )}
-          {isActive ? "Configurado" : "Pendente"}
-        </span>
+        {name === "Stripe" ? (
+          (() => {
+            const stripeConectado = Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+            return (
+              <span
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${stripeConectado
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-destructive/15 text-destructive-foreground"
+                  }`}
+              >
+                {stripeConectado ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : (
+                  <AlertCircle className="h-3 w-3" />
+                )}
+                {stripeConectado ? "Conectado" : "Não configurado"}
+              </span>
+            );
+          })()
+        ) : (
+          <span
+            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isActive
+              ? "bg-emerald-500/15 text-emerald-400"
+              : "bg-muted text-muted-foreground"
+              }`}
+          >
+            {isActive ? (
+              <CheckCircle2 className="h-3 w-3" />
+            ) : (
+              <AlertCircle className="h-3 w-3" />
+            )}
+            {isActive ? "Configurado" : "Pendente"}
+          </span>
+        )}
       </div>
 
       {/* Name & description */}

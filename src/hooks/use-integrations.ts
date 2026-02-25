@@ -26,7 +26,11 @@ export function useIntegrations() {
 
         // Regras de validação baseadas em regras-limitadas/limitaçoes.md
         if (id === 'utmify') return item.config.apiKey ? "active" : "pending";
-        if (id === 'stripe') return (item.config.pubKey && item.config.secKey) ? "active" : "pending";
+        if (id === 'stripe') {
+            const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+            const hasKeys = (item.config.pubKey && item.config.secKey);
+            return (envKey || hasKeys) ? "active" : "pending";
+        }
         if (id === 'pushinpay') return item.config.apiToken ? "active" : "pending";
 
         return "active";
