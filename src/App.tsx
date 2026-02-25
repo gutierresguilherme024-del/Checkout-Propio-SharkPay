@@ -15,6 +15,7 @@ import Payments from "./views/admin/Payments";
 import Products from "./views/admin/Products";
 import Delivery from "./views/admin/Delivery";
 import Editor from "./views/admin/Editor";
+import AgenteIA from "./views/admin/AgenteIA";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
                             <Route path="products" element={<Products />} />
                             <Route path="delivery" element={<Delivery />} />
                             <Route path="editor" element={<Editor />} />
+                            <Route path="agente" element={<AgenteIA />} />
                         </Route>
 
                         <Route path="*" element={<Navigate to="/" replace />} />

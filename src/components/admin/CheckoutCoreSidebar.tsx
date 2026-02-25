@@ -18,7 +18,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 // import { NavLink } from "@/components/NavLink"; // Removido
-import { BarChart3, CreditCard, Home, Link2, Mail, Palette, Package } from "lucide-react";
+import { BarChart3, Bot, CreditCard, Home, Link2, Mail, Palette, Package } from "lucide-react";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { LogoutButton } from "./LogoutButton";
 
@@ -73,6 +73,13 @@ export function CheckoutCoreSidebar() {
     { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
     { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },
     { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
+    {
+      title: "Agente IA",
+      url: "/admin/agente",
+      icon: Bot,
+      emoji: "🤖",
+      badge: { label: "LLM", color: "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.3)]" },
+    },
   ], [activeGatewaysCount, activeTrackingCount, loading]);
 
   const { pathname } = useLocation();

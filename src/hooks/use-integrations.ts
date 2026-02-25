@@ -31,7 +31,10 @@ export function useIntegrations() {
             const hasKeys = (item.config.pubKey && item.config.secKey);
             return (envKey || hasKeys) ? "active" : "pending";
         }
-        if (id === 'pushinpay') return item.config.apiToken ? "active" : "pending";
+        if (id === 'pushinpay') {
+            const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
+            return (item.config.apiToken || envKey) ? "active" : "pending";
+        }
 
         return "active";
     };

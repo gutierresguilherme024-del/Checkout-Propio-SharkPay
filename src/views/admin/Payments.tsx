@@ -291,6 +291,25 @@ function IntegrationCard({
               </span>
             );
           })()
+        ) : name === "PushinPay" ? (
+          (() => {
+            const pushinConectado = isActive || !!import.meta.env.VITE_PUSHINPAY_TOKEN;
+            return (
+              <span
+                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${pushinConectado
+                  ? "bg-emerald-500/15 text-emerald-400"
+                  : "bg-muted text-muted-foreground"
+                  }`}
+              >
+                {pushinConectado ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : (
+                  <AlertCircle className="h-3 w-3" />
+                )}
+                {pushinConectado ? "Conectado" : "Pendente"}
+              </span>
+            );
+          })()
         ) : (
           <span
             className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isActive

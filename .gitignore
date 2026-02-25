@@ -26,3 +26,6 @@ dist
 dist-ssr
 .vercel
 .env*.local
+
+# Agente LLM
+agente.config.json

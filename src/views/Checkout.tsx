@@ -13,6 +13,7 @@ export default function PublicCheckout() {
   const { slug } = useParams();
   const [produto, setProduto] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pixData, setPixData] = useState<any>(null);
 
   useEffect(() => {
     async function fetchProduto() {
@@ -105,7 +106,30 @@ export default function PublicCheckout() {
               price: produto.preco,
               delivery_content: produto.descricao || ""
             }}
+            onPaySuccess={(data) => {
+              if (data.qr_code) setPixData(data);
+            }}
           />
+
+          {pixData && (
+            <div className="mt-8 flex flex-col items-center gap-4 p-6 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <p className="text-white font-semibold">Escaneie o QR Code para pagar</p>
+              <img src={`data:image/png;base64,${pixData.qr_code}`} className="w-48 h-48 rounded-lg" alt="QR Code Pix" />
+              <div className="w-full p-3 bg-slate-700 rounded-lg flex items-center gap-2">
+                <span className="text-xs text-slate-300 truncate flex-1">{pixData.qr_code_text}</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(pixData.qr_code_text)
+                    alert('Código copiado!')
+                  }}
+                  className="text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 text-center">Após o pagamento o produto será entregue automaticamente no seu email</p>
+            </div>
+          )}
         </div>
       </HeroGlow>
     </div>

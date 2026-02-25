@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 import { integrationService } from "@/lib/integrations";
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/use-integrations";
+import { criarPix } from "@/lib/pushinpay";
 import type { CheckoutSettings, PaymentMethod } from "./types";
 
 /* ─── formatters ─────────────────────────────────────── */
@@ -79,8 +81,21 @@ const Ico = {
 /* ─── PIX QR Modal ──────────────────────────────────── */
 const MOCK_PIX = "00020126580014BR.GOV.BCB.PIX0136e464f9b4-5e73-4a81-a88d-98c76e39c52352040000530398654071234.565802BR5924SharkPay Checkout Dev60145302BR62070503***63047A8F";
 
-function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) {
+function PixModal({
+  amount,
+  onClose,
+  qrCode,
+  qrCodeText,
+  expiresAt
+}: {
+  amount: number;
+  onClose: () => void;
+  qrCode?: string;
+  qrCodeText?: string;
+  expiresAt?: string;
+}) {
   const [copied, setCopied] = useState(false);
+  const pixValue = qrCodeText || MOCK_PIX;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -93,7 +108,7 @@ function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) 
   }, [onClose]);
 
   const doCopy = async () => {
-    try { await navigator.clipboard.writeText(MOCK_PIX); } catch { }
+    try { await navigator.clipboard.writeText(pixValue); } catch { }
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -119,34 +134,38 @@ function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) 
         {/* QR */}
         <div className="pix-qr-wrap">
           <div className="pix-qr-box">
-            <svg width="148" height="148" viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Finder pattern TL */}
-              <rect x="8" y="8" width="42" height="42" rx="5" fill="currentColor" />
-              <rect x="14" y="14" width="30" height="30" rx="3" fill="white" />
-              <rect x="20" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
-              {/* Finder pattern TR */}
-              <rect x="98" y="8" width="42" height="42" rx="5" fill="currentColor" />
-              <rect x="104" y="14" width="30" height="30" rx="3" fill="white" />
-              <rect x="110" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
-              {/* Finder pattern BL */}
-              <rect x="8" y="98" width="42" height="42" rx="5" fill="currentColor" />
-              <rect x="14" y="104" width="30" height="30" rx="3" fill="white" />
-              <rect x="20" y="110" width="18" height="18" rx="1.5" fill="currentColor" />
-              {/* Data modules */}
-              {[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].flatMap((x, i) =>
-                [8, 13, 18, 23, 28, 33, 38, 43, 48, 55].map((y, j) =>
-                  (i + j) % 3 !== 0 ? <rect key={`${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i * j) % 5 === 0 ? 0.3 : 1} /> : null
-                )
-              )}
-              {[8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116, 122, 128].flatMap((y, i) =>
-                [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].map((x, j) =>
-                  (i + j) % 4 !== 1 ? <rect key={`d-${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i + j) % 7 === 0 ? 0.2 : 0.85} /> : null
-                )
-              )}
-              {/* center logo */}
-              <rect x="56" y="56" width="36" height="36" rx="6" fill="white" />
-              <text x="74" y="79" textAnchor="middle" fill="#32BCAD" fontSize="13" fontWeight="800" fontFamily="system-ui">PIX</text>
-            </svg>
+            {qrCode ? (
+              <img src={`data:image/png;base64,${qrCode}`} className="w-full h-full object-contain" alt="QR Code Pix" />
+            ) : (
+              <svg width="148" height="148" viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Finder pattern TL */}
+                <rect x="8" y="8" width="42" height="42" rx="5" fill="currentColor" />
+                <rect x="14" y="14" width="30" height="30" rx="3" fill="white" />
+                <rect x="20" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
+                {/* Finder pattern TR */}
+                <rect x="98" y="8" width="42" height="42" rx="5" fill="currentColor" />
+                <rect x="104" y="14" width="30" height="30" rx="3" fill="white" />
+                <rect x="110" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
+                {/* Finder pattern BL */}
+                <rect x="8" y="98" width="42" height="42" rx="5" fill="currentColor" />
+                <rect x="14" y="104" width="30" height="30" rx="3" fill="white" />
+                <rect x="20" y="110" width="18" height="18" rx="1.5" fill="currentColor" />
+                {/* Data modules */}
+                {[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].flatMap((x, i) =>
+                  [8, 13, 18, 23, 28, 33, 38, 43, 48, 55].map((y, j) =>
+                    (i + j) % 3 !== 0 ? <rect key={`${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i * j) % 5 === 0 ? 0.3 : 1} /> : null
+                  )
+                )}
+                {[8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116, 122, 128].flatMap((y, i) =>
+                  [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].map((x, j) =>
+                    (i + j) % 4 !== 1 ? <rect key={`d-${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i + j) % 7 === 0 ? 0.2 : 0.85} /> : null
+                  )
+                )}
+                {/* center logo */}
+                <rect x="56" y="56" width="36" height="36" rx="6" fill="white" />
+                <text x="74" y="79" textAnchor="middle" fill="#32BCAD" fontSize="13" fontWeight="800" fontFamily="system-ui">PIX</text>
+              </svg>
+            )}
           </div>
           <p className="pix-qr-hint">Escaneie com o app do seu banco</p>
         </div>
@@ -162,7 +181,7 @@ function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) 
         <div className="pix-copy-block">
           <div className="pix-copy-label">Pix copia e cola</div>
           <div className="pix-copy-row">
-            <code className="pix-copy-code">{MOCK_PIX.slice(0, 42)}…</code>
+            <code className="pix-copy-code">{pixValue.slice(0, 42)}…</code>
             <button onClick={doCopy} className={cn("pix-copy-btn", copied && "pix-copy-btn--ok")}>
               {copied ? <Ico.Check /> : <Ico.Copy />}
               {copied ? "Copiado!" : "Copiar"}
@@ -173,7 +192,7 @@ function PixModal({ amount, onClose }: { amount: number; onClose: () => void }) 
         {/* expiry */}
         <div className="pix-expiry">
           <Ico.Clock />
-          QR expira em <strong>30 minutos</strong>
+          QR expira em <strong>{expiresAt ? new Date(expiresAt).toLocaleTimeString() : '30 minutos'}</strong>
         </div>
 
         {/* footer */}
@@ -210,14 +229,25 @@ export type CheckoutShellProps = {
   } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
+  onPaySuccess?: (data: any) => void;
 };
 
-export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm }: CheckoutShellProps) {
+export function CheckoutShell({
+  settings,
+  product,
+  mode = "public",
+  onCaptureUtm,
+  onPaySuccess
+}: CheckoutShellProps) {
   /* integration status */
   const { payments, tracking, getStatus, loading } = useIntegrations();
 
-  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments]);
-  const isPushinPayActive = useMemo(() => getStatus(payments, 'pushinpay') === 'active', [payments]);
+  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments, getStatus]);
+  const isPushinPayActive = useMemo(() => {
+    return getStatus(payments, 'pushinpay') === 'active' || !!import.meta.env.VITE_PUSHINPAY_TOKEN;
+  }, [payments, getStatus]);
+
+  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
 
   /* product display data */
   const displayProduct = useMemo(() => {
@@ -242,6 +272,7 @@ export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm
   const [consent, setConsent] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pixOpen, setPixOpen] = useState(false);
+  const [localPixData, setLocalPixData] = useState<any>(null);
 
   // Se o método padrão não estiver disponível, troca para o outro
   useEffect(() => {
@@ -320,7 +351,23 @@ export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm
     await integrationService.sendToN8N(payload);
 
     if (method === "pix") {
-      setPixOpen(true);
+      try {
+        setIsGeneratingPix(true);
+        const data = await criarPix({
+          valor: amount,
+          email,
+          nome: name,
+          pedido_id: `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+        });
+        setLocalPixData(data);
+        setPixOpen(true);
+        onPaySuccess?.(data);
+        toast.success("QR Code gerado com sucesso!");
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao gerar PIX");
+      } finally {
+        setIsGeneratingPix(false);
+      }
     } else {
       toast.success("Processando pagamento... (Simulação de integração real)");
       console.log("Payload enviado ao n8n/Supabase:", payload);
@@ -500,8 +547,10 @@ export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm
             </label>
 
             {/* CTA */}
-            <button id="sco-pay-btn" className="sco-cta" onClick={onPay}>
-              <Ico.Lock />
+            <button id="sco-pay-btn" className="sco-cta" onClick={onPay} disabled={isGeneratingPix}>
+              {isGeneratingPix ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : <Ico.Lock />}
               {method === "pix" ? `Gerar QR Code Pix · ${fmtBRL(amount)}` : `Pagar ${fmtBRL(amount)}`}
             </button>
 
@@ -532,7 +581,18 @@ export function CheckoutShell({ settings, product, mode = "public", onCaptureUtm
       </div>
 
       {/* PIX MODAL */}
-      {pixOpen && <PixModal amount={amount} onClose={() => setPixOpen(false)} />}
+      {pixOpen && localPixData && (
+        <PixModal
+          amount={amount}
+          onClose={() => setPixOpen(false)}
+          qrCode={localPixData.qr_code}
+          qrCodeText={localPixData.qr_code_text}
+          expiresAt={localPixData.expires_at}
+        />
+      )}
+      {pixOpen && !localPixData && (
+        <PixModal amount={amount} onClose={() => setPixOpen(false)} />
+      )}
     </>
   );
 }
