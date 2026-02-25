@@ -68,8 +68,8 @@ export default function AdminTracking() {
       const configs = await integrationService.getSettings('tracking');
       const utmify = configs.find(c => c.id === 'utmify');
       if (utmify) {
-        setApiKey(utmify.config.apiKey || "");
-        setPixelId(utmify.config.pixelId || "");
+        setApiKey(String(utmify.config.apiKey || ""));
+        setPixelId(String(utmify.config.pixelId || ""));
         setEnabled(utmify.enabled);
       }
       setIsLoading(false);
@@ -306,11 +306,10 @@ function IntegrationCard({
         onClick={onIntegrate}
         className="
           mt-auto flex w-full items-center justify-center gap-2 rounded-xl
-          border border-white/10 bg-[hsl(222,28%,12%)] px-4 py-2.5
+          border border-border bg-muted/50 px-4 py-2.5
           text-sm font-medium text-foreground
           transition-all duration-150
-          hover:bg-[hsl(222,28%,16%)] hover:border-primary/30
-          dark:bg-[hsl(222,28%,10%)] dark:hover:bg-[hsl(222,28%,14%)]
+          hover:bg-muted hover:border-primary/30
           group-hover:text-primary
         "
       >

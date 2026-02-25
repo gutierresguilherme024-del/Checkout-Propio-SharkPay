@@ -14,11 +14,14 @@ export async function criarPix(dados: {
         body: JSON.stringify(dados)
     })
 
-    const data = await response.json()
-
+    const contentType = response.headers.get('content-type')
     if (!response.ok) {
-        throw new Error(data.erro?.message || 'Erro ao gerar PIX')
+        if (contentType && contentType.includes('application/json')) {
+            const data = await response.json()
+            throw new Error(data.error || data.erro?.message || 'Erro ao gerar PIX')
+        }
+        throw new Error('Servidor PIX offline ou erro na Vercel (500).')
     }
 
-    return data
+    return response.json()
 }

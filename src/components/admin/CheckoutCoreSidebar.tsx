@@ -17,10 +17,12 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
+
 // import { NavLink } from "@/components/NavLink"; // Removido
-import { BarChart3, Bot, CreditCard, Home, Link2, Mail, Palette, Package } from "lucide-react";
+import { BarChart3, Bot, CreditCard, Home, Link2, Mail, Palette, Package, Moon, Sun, Settings } from "lucide-react";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { LogoutButton } from "./LogoutButton";
+import { useTheme } from "../theme/ThemeProvider";
 
 const items = [
   { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊", badge: null },
@@ -45,6 +47,7 @@ const items = [
 
 export function CheckoutCoreSidebar() {
   const { state, isMobile, setOpen } = useSidebar();
+  const { theme, setTheme } = useTheme();
   const collapsed = state === "collapsed";
   const { activeGatewaysCount, activeTrackingCount, loading } = useIntegrations();
 
@@ -163,10 +166,31 @@ export function CheckoutCoreSidebar() {
           <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="lg"
+                  tooltip="Alternar Tema"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 transition-colors">
+                    <div className="relative flex h-4 w-4 items-center justify-center">
+                      <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                      <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5 leading-none overflow-hidden text-left">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Aparência</span>
+                    <span className="text-sm font-medium truncate">
+                      {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
+                    </span>
+                  </div>
+                </SidebarMenuButton>
+
+              </SidebarMenuItem>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="🏠 Voltar para Home">
                   <Link to="/" className="group flex items-center gap-2">
                     <Home className="shrink-0" />
-                    {!collapsed && <span className="truncate">Voltar para Home</span>}
+                    {!collapsed && <span className="truncate text-sm">Voltar para Home</span>}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

@@ -9,26 +9,55 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NavLink } from "@/components/NavLink";
 
+interface Produto {
+  nome: string;
+  preco: number;
+  descricao?: string;
+  imagem_url: string | null;
+  checkout_slug: string;
+  ativo: boolean;
+}
+
+interface PixData {
+  qr_code?: string;
+  qr_code_text?: string;
+  expires_at?: string;
+}
+
 export default function PublicCheckout() {
   const { slug } = useParams();
-  const [produto, setProduto] = useState<any>(null);
+  const [produto, setProduto] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pixData, setPixData] = useState<any>(null);
+  const [pixData, setPixData] = useState<PixData | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchProduto() {
-      if (!slug) return;
-      const { data, error } = await supabase
-        .from('produtos')
-        .select('*')
-        .eq('checkout_slug', slug)
-        .eq('ativo', true)
-        .single();
-
-      if (!error && data) {
-        setProduto(data);
+      if (!slug || slug === 'demo') {
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+      try {
+        const { data, error: sbError } = await supabase
+          .from('produtos')
+          .select('*')
+          .eq('checkout_slug', slug)
+          .eq('ativo', true)
+          .single();
+
+        if (sbError) {
+          console.error("Erro Supabase:", sbError);
+          setError(sbError.message);
+        } else if (data) {
+          setProduto(data);
+        }
+      } catch (err: any) {
+        console.error("Erro fatal:", err);
+        setError(err.message || "Erro desconhecido");
+      } finally {
+        setLoading(false);
+      }
     }
     fetchProduto();
   }, [slug]);
@@ -74,12 +103,21 @@ export default function PublicCheckout() {
   }
 
   if (!produto) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white gap-4">
-      <h2 className="text-2xl font-bold">Produto não encontrado</h2>
-      <p className="text-muted-foreground">O link acessado é inválido ou o produto está inativo.</p>
-      <Button asChild variant="outline">
-        <NavLink to="/">Voltar para Home</NavLink>
-      </Button>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white gap-4 p-8 text-center">
+      <h2 className="text-2xl font-bold text-red-400">Produto não encontrado</h2>
+      <p className="text-muted-foreground max-w-md">
+        {error ? `Erro técnico: ${error}` : 'O link acessado é inválido ou o produto está inativo.'}
+      </p>
+      <div className="flex gap-4">
+        <Button asChild variant="outline">
+          <NavLink to="/">Voltar para Home</NavLink>
+        </Button>
+        {slug !== 'demo' && (
+          <Button asChild>
+            <NavLink to="/checkout/demo">Ver Demonstração</NavLink>
+          </Button>
+        )}
+      </div>
     </div>
   );
 
@@ -104,6 +142,7 @@ export default function PublicCheckout() {
             product={{
               name: produto.nome,
               price: produto.preco,
+              image_url: produto.imagem_url,
               delivery_content: produto.descricao || ""
             }}
             onPaySuccess={(data) => {
@@ -119,8 +158,10 @@ export default function PublicCheckout() {
                 <span className="text-xs text-slate-300 truncate flex-1">{pixData.qr_code_text}</span>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(pixData.qr_code_text)
-                    alert('Código copiado!')
+                    if (pixData.qr_code_text) {
+                      navigator.clipboard.writeText(pixData.qr_code_text)
+                      alert('Código copiado!')
+                    }
                   }}
                   className="text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
                 >

@@ -45,8 +45,9 @@ export default function AdminOverview() {
 
       if (error) throw error;
       setRealOrders(data || []);
-    } catch (err: any) {
-      console.error("Erro ao buscar pedidos:", err);
+    } catch (err) {
+      const error = err as Error;
+      console.error("Erro ao buscar pedidos:", error);
       toast.error("Falha ao carregar dados reais do Supabase");
     } finally {
       setLoading(false);
@@ -171,7 +172,7 @@ export default function AdminOverview() {
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <Card className="p-4 border-white/5 bg-slate-900/50 backdrop-blur-xl">
+        <Card className="p-4 border-border bg-card/50 backdrop-blur-xl">
           <p className="text-sm font-medium mb-4">Métricas por método (Vendas Pagas)</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <MiniStat title="Pix" value={String(stats.pixCount)} color="text-emerald-400" />
@@ -208,10 +209,10 @@ export default function AdminOverview() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="E-mail ou Nome"
-              className="w-56 bg-slate-900/50 border-white/10"
+              className="w-56 bg-card/50 border-border"
             />
-            <Select value={methodFilter} onValueChange={(v) => setMethodFilter(v as any)}>
-              <SelectTrigger className="w-32 bg-slate-900/50 border-white/10">
+            <Select value={methodFilter} onValueChange={(v) => setMethodFilter(v as "all" | "pix" | "cartao")}>
+              <SelectTrigger className="w-32 bg-card/50 border-border">
                 <SelectValue placeholder="Método" />
               </SelectTrigger>
               <SelectContent>
@@ -220,7 +221,7 @@ export default function AdminOverview() {
                 <SelectItem value="cartao">Cartão</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | OrderStatus)}>
               <SelectTrigger className="w-32 bg-slate-900/50 border-white/10">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -235,12 +236,12 @@ export default function AdminOverview() {
         </div>
 
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="bg-slate-900/50 border-white/10">
+          <TabsList className="bg-card/50 border-border">
             <TabsTrigger value="orders">Transações</TabsTrigger>
             <TabsTrigger value="logs">Logs do Sistema</TabsTrigger>
           </TabsList>
           <TabsContent value="orders" className="mt-3">
-            <Card className="overflow-hidden border-white/5 bg-slate-900/50">
+            <Card className="overflow-hidden border-border bg-card/50">
               {loading && realOrders.length === 0 ? (
                 <div className="p-20 flex flex-col items-center justify-center gap-4">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -267,7 +268,7 @@ export default function AdminOverview() {
                         <TableRow key={o.id} className="border-white/5 hover:bg-white/5">
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-medium text-slate-200">{o.nome || 'Cliente'}</span>
+                              <span className="font-medium text-foreground">{o.nome || 'Cliente'}</span>
                               <span className="text-xs text-muted-foreground">{o.email}</span>
                             </div>
                           </TableCell>
@@ -301,11 +302,11 @@ export default function AdminOverview() {
 
 function MetricCard({ title, value, hint }: { title: string; value: string; hint: string }) {
   return (
-    <Card className="relative overflow-hidden p-4 border-white/5 bg-slate-900/50 backdrop-blur-xl">
+    <Card className="relative overflow-hidden p-4 border-border bg-card/50 backdrop-blur-xl">
       <div className="absolute -right-10 -top-10 size-28 rounded-full bg-primary/10 blur-2xl" />
       <div className="relative">
         <p className="text-xs text-muted-foreground">{title}</p>
-        <p className="mt-2 font-display text-2xl text-white">{value}</p>
+        <p className="mt-2 font-display text-2xl text-foreground font-bold">{value}</p>
         <p className="mt-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{hint}</p>
       </div>
     </Card>
@@ -314,7 +315,7 @@ function MetricCard({ title, value, hint }: { title: string; value: string; hint
 
 function MiniStat({ title, value, color }: { title: string; value: string, color: string }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-slate-950/50 p-3">
+    <div className="rounded-xl border border-border bg-muted/30 p-3">
       <p className="text-xs text-muted-foreground">Total via {title}</p>
       <p className={`mt-1 font-display text-xl ${color}`}>{value}</p>
     </div>

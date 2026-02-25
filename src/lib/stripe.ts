@@ -16,9 +16,13 @@ export async function criarCheckoutStripe(dados: {
         body: JSON.stringify(dados)
     })
 
+    const contentType = response.headers.get('content-type')
     if (!response.ok) {
-        const erro = await response.json()
-        throw new Error(erro.error || 'Erro ao criar checkout Stripe')
+        if (contentType && contentType.includes('application/json')) {
+            const erro = await response.json()
+            throw new Error(erro.error || 'Erro ao criar checkout Stripe')
+        }
+        throw new Error('Servidor de pagamentos offline ou erro na Vercel (500). Verifique os logs.')
     }
 
     return response.json()
@@ -26,10 +30,6 @@ export async function criarCheckoutStripe(dados: {
 
 import { loadStripe } from '@stripe/stripe-js'
 
-const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
-
-if (!publishableKey) {
-    console.warn('VITE_STRIPE_PUBLISHABLE_KEY não configurada. O Stripe não funcionará no checkout.')
-}
-
-export const stripePromise = publishableKey ? loadStripe(publishableKey) : null
+export const stripePromise = loadStripe(
+    import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
+)

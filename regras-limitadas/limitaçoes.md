@@ -11,7 +11,8 @@ Este documento define as regras de negócio para a exibição e funcionamento da
 ### Pagamentos
 - **Stripe**: Requer `pubKey` e `secKey`. Sem estas chaves, o checkout não deve permitir processamento de cartão.
 - **PushinPay**: Requer `apiToken`. Sem este token, o checkout não deve exibir a opção de Pix Dinâmico.
-- **Limite**: Atualmente o sistema suporta até 1 gateway de Cartão e 1 gateway de Pix simultaneamente no Checkout.
+- **MundPay**: Requer `apiToken` e `webhookSecret`. Utilizado como alternativa global para produtos digitais.
+- **Limite**: Atualmente o sistema suporta até 1 gateway de Cartão (Stripe ou MundPay) e 1 gateway de Pix simultaneamente no Checkout.
 
 ### Rastreamento
 - **UTMify**: Requer `apiKey`. O `pixelId` é opcional mas recomendado.
@@ -24,5 +25,7 @@ Este documento define as regras de negócio para a exibição e funcionamento da
 - O Sidebar deve exibir badges dinâmicos refletindo o número de integrações *reais* conectadas.
 - **Gateway de Pagamento**: Se nenhum estiver conectado, exibir badge de aviso crítico.
 26: 
-27: ## 4. Design e Layout
-28: - **Carrosséis na Home**: Está terminantemente PROIBIDO o uso de carrosséis de imagens ou integrações com navegação por setas e pontos (estilo `IntegrationCarousel` ou `HeroCarousel`) na página inicial. O design deve ser estático e direto.
+## 4. Design e Layout
+- **Carrosséis na Home**: Está terminantemente PROIBIDO o uso de carrosséis de imagens ou integrações com navegação por setas e pontos (estilo `IntegrationCarousel` ou `HeroCarousel`) na página inicial. O design deve ser estático e direto.
+- **Seletor de Temas**: O seletor de tema (Claro/Escuro) deve estar SEMPRE visível no rodapé da barra lateral administrativa para garantir acessibilidade e consistência visual.
+

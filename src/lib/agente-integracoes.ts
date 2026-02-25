@@ -22,34 +22,25 @@ export interface IntegracaoStatus {
     diagnostico: DiagnosticoResultado;
 }
 
-const SYSTEM_PROMPT = `Você é o Agente de Integrações do SharkPay Checkout — um assistente técnico especializado.
+const SYSTEM_PROMPT = `Você é o "Cérebro do SharkPay" — um Engenheiro de Software Sênior e Especialista em Infraestrutura de Checkout.
 
-Stack do projeto: React 18 + Vite + TypeScript + Tailwind CSS + Supabase + Stripe + PushinPay + N8N + OpenRouter + Vercel.
+Sua missão é garantir que o sistema de checkout funcione com 100% de eficiência. Você tem conhecimento profundo de cada linha de código deste projeto.
 
-Integrações do projeto:
-1. SUPABASE - Banco de dados PostgreSQL + Auth + Storage
-2. STRIPE - Gateway de pagamento com cartão (international)
-3. PUSHINPAY - Gateway PIX brasileiro
-4. N8N - Automação de workflows e webhooks
-5. UTMIFY - Rastreamento de UTMs, pixels e conversões
-6. OPENROUTER - LLM gratuito para o agente de IA
-7. VERCEL - Hospedagem e deploy
+Stack Tecnológica:
+- Frontend: React 18, Vite, Tailwind CSS, Framer Motion
+- Backend/DB: Supabase (Auth, DB, Storage)
+- Pagamentos: Stripe (Global), PushinPay (PIX), Mundipagg (Global/Alternativo)
+- Automação: N8N (Webhooks e Workflows)
+- Inteligência: OpenRouter (Nexus do Agente)
 
-Suas capacidades:
-- Diagnosticar se cada integração está funcionando
-- Sugerir correções para erros em qualquer integração  
-- Explicar como configurar integrações faltantes
-- Resolver conflitos entre integrações
-- Verificar variáveis de ambiente
-- Analisar logs de erro
-- Sugerir melhorias de performance e segurança
+Suas diretrizes de comunicação:
+1. Identidade: Você é o Agente IA SharkPay. Seja técnico, preciso e extremamente útil.
+2. Analítico: Ao diagnosticar erros, identifique a causa raiz.
+3. Solucionador: Forneça passos exatos e comandos de terminal.
+4. Linguagem: Responda SEMPRE em português brasileiro (PT-BR).
+5. FIX-REQUEST: Sempre que encontrar um erro crítico, termine sua resposta com um bloco "SOLUÇÃO PARA ANTIGRAVITY" contendo instruções técnicas estruturadas que, se coladas para a IA de desenvolvimento, permitirão que ela corrija o código imediatamente.
 
-Regras:
-- Responda SEMPRE em português brasileiro
-- Seja conciso e objetivo
-- Foque em soluções práticas e acionáveis
-- Nunca exponha chaves de API nas respostas
-- Quando pedido JSON, retorne APENAS JSON válido sem markdown`;
+Contexto de Reparo: Imagine que você está reportando para outro desenvolvedor sênior (Antigravity). Seja específico sobre nomes de arquivos e linhas se possível.`;
 
 // ========================================================================
 // TESTES DE CONECTIVIDADE REAIS
@@ -330,6 +321,30 @@ function testarVercel(): DiagnosticoResultado {
 }
 
 /**
+ * Testa configuração da Mundipagg
+ */
+function testarMundipagg(): DiagnosticoResultado {
+    const apiToken = import.meta.env.VITE_MUNDIPAGG_SECRET_KEY;
+
+    if (!apiToken || apiToken.includes('placeholder')) {
+        return {
+            status: "warning",
+            mensagem: "Mundipagg não configurada (Opcional)",
+            sugestoes: [
+                "Configure VITE_MUNDIPAGG_SECRET_KEY no .env",
+                "Acesse o dashboard da Mundipagg para obter sua Secret Key"
+            ]
+        };
+    }
+
+    return {
+        status: "ok",
+        mensagem: "Mundipagg configurada e pronta para uso",
+        sugestoes: []
+    };
+}
+
+/**
  * Testa integrações salvas no Supabase (Stripe/PushinPay do admin)
  */
 async function testarIntegracoesAdmin(): Promise<IntegracaoStatus[]> {
@@ -376,6 +391,27 @@ async function testarIntegracoesAdmin(): Promise<IntegracaoStatus[]> {
                             ? "PushinPay com token configurado no admin"
                             : "PushinPay ativado mas faltam tokens no admin",
                     sugestoes: !hasToken ? ["Configure API Token em Admin → Pagamentos → PushinPay"] : []
+                }
+            });
+        }
+
+        // Verificar Mundipagg no admin
+        const mundipagg = payments.find(p => p.id === 'mundipagg');
+        if (mundipagg) {
+            const hasKey = !!mundipagg.config?.secretKey;
+            resultados.push({
+                nome: "Mundipagg (Admin Config)",
+                tipo: "payment",
+                icone: "🌐",
+                ativo: mundipagg.enabled && hasKey,
+                diagnostico: {
+                    status: mundipagg.enabled && hasKey ? "ok" : (!mundipagg.enabled ? "warning" : "error"),
+                    mensagem: !mundipagg.enabled
+                        ? "Mundipagg desativada no painel admin"
+                        : hasKey
+                            ? "Mundipagg configurada no admin"
+                            : "Mundipagg ativada mas falta Secret Key",
+                    sugestoes: !hasKey ? ["Configure Secret Key em Admin → Pagamentos → Mundipagg"] : []
                 }
             });
         }
@@ -466,7 +502,17 @@ export async function diagnosticarIntegracoes(): Promise<IntegracaoStatus[]> {
         diagnostico: vercelResult,
     });
 
-    // 8. Integrações configuradas no admin
+    // 8. Mundipagg (env vars)
+    const mundipaggResult = testarMundipagg();
+    resultados.push({
+        nome: "Mundipagg",
+        tipo: "payment",
+        icone: "🌐",
+        ativo: mundipaggResult.status === "ok",
+        diagnostico: mundipaggResult,
+    });
+
+    // 9. Integrações configuradas no admin
     const adminConfigs = await testarIntegracoesAdmin();
     resultados.push(...adminConfigs);
 
@@ -599,6 +645,26 @@ export async function gerarRelatorioSaude(): Promise<string> {
             });
         }
         relatorio += `\n`;
+    }
+
+    // Seção de Handoff para IA de Desenvolvimento
+    const problemas = diagnosticos.filter(d => d.diagnostico.status !== 'ok');
+    if (problemas.length > 0) {
+        relatorio += `## 🛠️ BRIEFING PARA REPARO (ANTIGRAVITY)\n`;
+        relatorio += `*Copie este bloco e envie para sua IA de desenvolvimento para correção automática.*\n\n`;
+        relatorio += `\`\`\`json\n`;
+        relatorio += JSON.stringify({
+            origem: "Agente IA SharkPay",
+            projeto: "SharkPay Checkout",
+            timestamp: new Date().toISOString(),
+            diagnosticos: problemas.map(p => ({
+                integracao: p.nome,
+                status: p.diagnostico.status,
+                detalhe: p.diagnostico.mensagem,
+                sugestoes: p.diagnostico.sugestoes
+            }))
+        }, null, 2);
+        relatorio += `\n\`\`\`\n`;
     }
 
     return relatorio;

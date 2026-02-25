@@ -74,6 +74,32 @@ const PAYMENT_INTEGRATIONS = [
       { key: "webhookToken", label: "Webhook Token", placeholder: "ppwh_...", secret: true },
     ],
   },
+  {
+    id: "mundpay",
+    name: "MundPay",
+    description: "Gateway global para produtos digitais e assinaturas.",
+    icon: (
+      <svg viewBox="0 0 40 40" fill="none" className="h-full w-full">
+        <rect width="40" height="40" rx="10" fill="#000" />
+        <text
+          x="50%"
+          y="55%"
+          dominantBaseline="middle"
+          textAnchor="middle"
+          fontSize="14"
+          fontWeight="800"
+          fill="white"
+          fontFamily="sans-serif"
+        >
+          MP
+        </text>
+      </svg>
+    ),
+    fields: [
+      { key: "apiToken", label: "Bearer Token", placeholder: "mund_...", secret: true },
+      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_...", secret: true },
+    ],
+  },
 ] as const;
 
 type Integration = (typeof PAYMENT_INTEGRATIONS)[number];
@@ -81,9 +107,10 @@ type Integration = (typeof PAYMENT_INTEGRATIONS)[number];
 export default function AdminPayments() {
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({
     stripe: true,
-    pushinpay: true
+    pushinpay: true,
+    mundpay: true
   });
-  const [configValues, setConfigValues] = useState<Record<string, any>>({});
+  const [configValues, setConfigValues] = useState<Record<string, Record<string, string | number | boolean | null>>>({});
   const [openInteg, setOpenInteg] = useState<Integration["id"] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -118,6 +145,24 @@ export default function AdminPayments() {
     });
 
     toast.success(`Configurações de ${integ.name} salvas!`);
+  };
+
+  const handleToggle = async (id: string, enabled: boolean) => {
+    const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;
+
+    // Atualiza estado local
+    setActiveStates(prev => ({ ...prev, [id]: enabled }));
+
+    // Salva imediatamente
+    await integrationService.saveSettings({
+      id,
+      type: 'payment',
+      name: integ.name,
+      enabled: enabled,
+      config: configValues[id] || {}
+    });
+
+    toast.success(`${integ.name} ${enabled ? 'ativado' : 'desativado'} com sucesso!`);
   };
 
   const handleTest = async (id: string) => {
@@ -162,6 +207,7 @@ export default function AdminPayments() {
               description={integ.description}
               icon={integ.icon}
               isActive={activeStates[integ.id]}
+              onToggle={(enabled) => handleToggle(integ.id, enabled)}
               onIntegrate={() =>
                 setOpenInteg((prev) => (prev === integ.id ? null : integ.id))
               }
@@ -201,7 +247,7 @@ export default function AdminPayments() {
                   <Label>{f.label}</Label>
                   <Input
                     type={f.secret ? "password" : "text"}
-                    value={configValues[integ.id]?.[f.key] || ""}
+                    value={String(configValues[integ.id]?.[f.key] ?? "")}
                     onChange={(e) => setConfigValues(prev => ({
                       ...prev,
                       [integ.id]: { ...(prev[integ.id] || {}), [f.key]: e.target.value }
@@ -254,12 +300,14 @@ function IntegrationCard({
   icon,
   isActive,
   onIntegrate,
+  onToggle,
 }: {
   name: string;
   description: string;
   icon: React.ReactNode;
   isActive: boolean;
   onIntegrate: () => void;
+  onToggle: (enabled: boolean) => void;
 }) {
   return (
     <div
@@ -271,7 +319,14 @@ function IntegrationCard({
     >
       {/* Logo */}
       <div className="flex items-start justify-between">
-        <div className="h-12 w-12 overflow-hidden rounded-xl shadow-sm">{icon}</div>
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 overflow-hidden rounded-xl shadow-sm">{icon}</div>
+          <Switch
+            checked={isActive}
+            onCheckedChange={onToggle}
+            className="data-[state=checked]:bg-emerald-500"
+          />
+        </div>
         {name === "Stripe" ? (
           (() => {
             const stripeConectado = Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
@@ -338,11 +393,10 @@ function IntegrationCard({
         onClick={onIntegrate}
         className="
           mt-auto flex w-full items-center justify-center gap-2 rounded-xl
-          border border-white/10 bg-[hsl(222,28%,12%)] px-4 py-2.5
+          border border-border bg-muted/50 px-4 py-2.5
           text-sm font-medium text-foreground
           transition-all duration-150
-          hover:bg-[hsl(222,28%,16%)] hover:border-primary/30
-          dark:bg-[hsl(222,28%,10%)] dark:hover:bg-[hsl(222,28%,14%)]
+          hover:bg-muted hover:border-primary/30
           group-hover:text-primary
         "
       >

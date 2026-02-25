@@ -1,397 +1,367 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgenteLLM } from "@/hooks/useAgenteLLM";
-import type { IntegracaoStatus } from "@/lib/agente-integracoes";
-
-function getStatusBadge(status: string) {
-    switch (status) {
-        case "ok":
-            return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">✅ OK</Badge>;
-        case "warning":
-            return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">⚠️ Atenção</Badge>;
-        case "error":
-            return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">❌ Erro</Badge>;
-        default:
-            return <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30 text-xs">🔄 ...</Badge>;
-    }
-}
-
-function getStatusColor(status: string) {
-    switch (status) {
-        case "ok": return "border-emerald-500/20 bg-emerald-500/5";
-        case "warning": return "border-amber-500/20 bg-amber-500/5";
-        case "error": return "border-red-500/20 bg-red-500/5";
-        default: return "border-slate-500/20 bg-slate-500/5";
-    }
-}
+import {
+    Bot,
+    Search,
+    FileText,
+    Zap,
+    CheckCircle2,
+    AlertCircle,
+    XCircle,
+    RefreshCw,
+    Send,
+    Sparkles,
+    ShieldCheck,
+    Code2,
+    Terminal,
+    MessageSquare
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 export default function AgenteIA() {
     const {
         carregando,
         disponivel,
         diagnosticos,
-        ultimaResposta,
         relatorio,
         erro,
         verificarDisponibilidade,
         executarDiagnostico,
-        resolverIntegracao,
         perguntar,
         gerarRelatorio,
     } = useAgenteLLM();
 
     const [perguntaTexto, setPerguntaTexto] = useState("");
-    const [integracaoSelecionada, setIntegracaoSelecionada] = useState<IntegracaoStatus | null>(null);
-    const [modoResolucao, setModoResolucao] = useState(false);
     const [historicoRespostas, setHistoricoRespostas] = useState<
-        Array<{ pergunta: string; resposta: string; timestamp: string }>
+        Array<{ role: 'user' | 'assistant'; content: string; timestamp: string; isDiagnostic?: boolean }>
     >([]);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         verificarDisponibilidade();
     }, []);
 
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [historicoRespostas, carregando]);
+
     const handleDiagnostico = async () => {
-        await executarDiagnostico();
+        toast.promise(executarDiagnostico(), {
+            loading: 'Iniciando diagnóstico profundo...',
+            success: (data) => {
+                const total = data?.length || 0;
+                const errors = data?.filter(d => d.diagnostico.status === 'error').length || 0;
+
+                setHistoricoRespostas(prev => [
+                    ...prev,
+                    {
+                        role: 'assistant',
+                        content: `Diagnóstico concluído em ${total} integrações. ${errors > 0 ? `Encontrei ${errors} problema(s) crítico(s) que precisam de atenção.` : 'Tudo parece operacional!'}`,
+                        timestamp: new Date().toLocaleTimeString("pt-BR"),
+                        isDiagnostic: true
+                    }
+                ]);
+                return "Diagnóstico concluído";
+            },
+            error: 'Falha ao executar diagnóstico'
+        });
     };
 
     const handlePerguntar = async () => {
-        if (!perguntaTexto.trim()) return;
-        const resposta = await perguntar(perguntaTexto);
-        if (resposta) {
-            setHistoricoRespostas((prev) => [
-                {
-                    pergunta: perguntaTexto,
-                    resposta,
-                    timestamp: new Date().toLocaleTimeString("pt-BR"),
-                },
-                ...prev,
-            ]);
-            setPerguntaTexto("");
-        }
-    };
+        if (!perguntaTexto.trim() || carregando) return;
 
-    const handleResolverIntegracao = async (integ: IntegracaoStatus) => {
-        setIntegracaoSelecionada(integ);
-        setModoResolucao(true);
-        const resposta = await resolverIntegracao(
-            integ.nome,
-            integ.diagnostico.mensagem,
-            integ.diagnostico.sugestoes.join("; ")
-        );
+        const q = perguntaTexto;
+        setPerguntaTexto("");
+
+        setHistoricoRespostas(prev => [
+            ...prev,
+            { role: 'user', content: q, timestamp: new Date().toLocaleTimeString("pt-BR") }
+        ]);
+
+        const resposta = await perguntar(q);
         if (resposta) {
-            setHistoricoRespostas((prev) => [
-                {
-                    pergunta: `🔧 Resolver: ${integ.nome} — ${integ.diagnostico.mensagem}`,
-                    resposta,
-                    timestamp: new Date().toLocaleTimeString("pt-BR"),
-                },
+            setHistoricoRespostas(prev => [
                 ...prev,
+                { role: 'assistant', content: resposta, timestamp: new Date().toLocaleTimeString("pt-BR") }
             ]);
         }
-        setModoResolucao(false);
     };
 
     const handleGerarRelatorio = async () => {
-        await gerarRelatorio();
+        const res = await gerarRelatorio();
+        if (res) {
+            setHistoricoRespostas(prev => [
+                ...prev,
+                { role: 'assistant', content: res, timestamp: new Date().toLocaleTimeString("pt-BR") }
+            ]);
+            toast.success("Relatório de saúde gerado!");
+        }
     };
 
-    // Contadores para o resumo
-    const totalOk = diagnosticos?.filter(d => d.diagnostico.status === 'ok').length || 0;
-    const totalWarning = diagnosticos?.filter(d => d.diagnostico.status === 'warning').length || 0;
-    const totalError = diagnosticos?.filter(d => d.diagnostico.status === 'error').length || 0;
-    const total = diagnosticos?.length || 0;
-
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <header className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h1 className="font-display text-2xl flex items-center gap-2">
-                        <span className="text-3xl">🤖</span> Agente IA — Central de Integrações
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Diagnostica e resolve <strong>todas</strong> as integrações: Supabase, Stripe, PushinPay, N8N, UTMify, OpenRouter, Vercel
-                    </p>
+        <div className="max-w-5xl mx-auto h-[calc(100vh-140px)] flex flex-col gap-6">
+            {/* Minimalist Header */}
+            <header className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                        <Bot className="size-6" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight">Agente SharkPay</h1>
+                        <p className="text-xs text-muted-foreground">Especialista em Integrações e Infraestrutura</p>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    {disponivel === true && (
-                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
-                            Online
-                        </Badge>
-                    )}
-                    {disponivel === false && (
-                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
-                            <span className="inline-block w-2 h-2 rounded-full bg-red-400 mr-1.5" />
-                            Offline
-                        </Badge>
-                    )}
-                    {disponivel === null && (
-                        <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">
-                            Verificando...
-                        </Badge>
-                    )}
+                <div className="flex items-center gap-3">
+                    <AnimatePresence>
+                        {disponivel !== null && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${disponivel ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"
+                                    }`}
+                            >
+                                <span className={`size-1.5 rounded-full ${disponivel ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
+                                {disponivel ? "Agente Online" : "Agente Offline"}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
             </header>
 
-            {/* Ações rápidas */}
-            <div className="flex flex-wrap gap-3">
-                <Button
-                    onClick={handleDiagnostico}
-                    disabled={carregando}
-                    className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 transition-all duration-300 shadow-lg shadow-cyan-900/20"
+            {/* Main Chat Interface */}
+            <Card className="flex-1 flex flex-col overflow-hidden border-border/60 bg-slate-950/40 backdrop-blur-xl relative">
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
+
+                {/* Chat Display */}
+                <div
+                    ref={scrollRef}
+                    className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth custom-scrollbar"
                 >
-                    {carregando && !modoResolucao ? (
-                        <span className="flex items-center gap-2"><span className="animate-spin">🔄</span> Analisando...</span>
+                    {historicoRespostas.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
+                            <div className="size-20 rounded-3xl bg-primary/5 flex items-center justify-center text-primary/40 border border-primary/10">
+                                <Sparkles className="size-10" />
+                            </div>
+                            <div className="max-w-md space-y-2">
+                                <h3 className="text-xl font-semibold">Como posso ajudar hoje?</h3>
+                                <p className="text-sm text-muted-foreground px-4">
+                                    Sou seu especialista em Checkout. Posso diagnosticar erros, configurar webhooks,
+                                    gerar relatórios de saúde ou responder dúvidas técnicas.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl px-4 uppercase text-[10px] font-bold tracking-widest text-muted-foreground/50">
+                                <div className="space-y-3">
+                                    <p className="text-center">Comandos Rápidos</p>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start gap-3 h-auto py-3 px-4 border-primary/10 hover:border-primary/30 hover:bg-primary/5 text-xs text-foreground group"
+                                        onClick={handleDiagnostico}
+                                    >
+                                        <Search className="size-4 text-primary group-hover:scale-110 transition-transform" />
+                                        Diagnosticar Projeto
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start gap-3 h-auto py-3 px-4 border-primary/10 hover:border-primary/30 hover:bg-primary/5 text-xs text-foreground group"
+                                        onClick={handleGerarRelatorio}
+                                    >
+                                        <FileText className="size-4 text-primary group-hover:scale-110 transition-transform" />
+                                        Gerar Relatório de Saúde
+                                    </Button>
+                                </div>
+                                <div className="space-y-3">
+                                    <p className="text-center">Dúvidas Frequentes</p>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start gap-3 h-auto py-3 px-4 border-primary/10 hover:border-primary/30 hover:bg-primary/5 text-xs text-foreground"
+                                        onClick={() => setPerguntaTexto("Por que meu PIX não está gerando QR code?")}
+                                    >
+                                        <Zap className="size-4 text-amber-500" />
+                                        Erro no QR Code PIX
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start gap-3 h-auto py-3 px-4 border-primary/10 hover:border-primary/30 hover:bg-primary/5 text-xs text-foreground"
+                                        onClick={() => setPerguntaTexto("Como configuro o webhook do Stripe?")}
+                                    >
+                                        <Terminal className="size-4 text-blue-500" />
+                                        Configurar Webhooks
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     ) : (
-                        <span className="flex items-center gap-2">🔍 Diagnosticar Tudo</span>
-                    )}
-                </Button>
-                <Button
-                    onClick={handleGerarRelatorio}
-                    disabled={carregando}
-                    variant="outline"
-                    className="border-slate-700 hover:bg-slate-800"
-                >
-                    📊 Gerar Relatório
-                </Button>
-                <Button
-                    onClick={() => verificarDisponibilidade()}
-                    disabled={carregando}
-                    variant="outline"
-                    className="border-slate-700 hover:bg-slate-800"
-                >
-                    📡 Testar Conexão LLM
-                </Button>
-            </div>
-
-            {/* Resumo visual */}
-            {diagnosticos && (
-                <section className="grid gap-3 sm:grid-cols-4">
-                    <Card className="relative overflow-hidden p-4 border-slate-700/50 bg-slate-900/80">
-                        <div className="absolute -right-6 -top-6 size-16 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 opacity-15 blur-xl" />
-                        <p className="text-xs text-muted-foreground">Total</p>
-                        <p className="mt-1 font-display text-2xl">{total}</p>
-                        <p className="text-xs text-muted-foreground">integrações</p>
-                    </Card>
-                    <Card className="relative overflow-hidden p-4 border-emerald-500/20 bg-emerald-500/5">
-                        <div className="absolute -right-6 -top-6 size-16 rounded-full bg-emerald-500 opacity-15 blur-xl" />
-                        <p className="text-xs text-emerald-400">Funcionando</p>
-                        <p className="mt-1 font-display text-2xl text-emerald-400">{totalOk}</p>
-                        <p className="text-xs text-emerald-400/60">✅ OK</p>
-                    </Card>
-                    <Card className="relative overflow-hidden p-4 border-amber-500/20 bg-amber-500/5">
-                        <div className="absolute -right-6 -top-6 size-16 rounded-full bg-amber-500 opacity-15 blur-xl" />
-                        <p className="text-xs text-amber-400">Alertas</p>
-                        <p className="mt-1 font-display text-2xl text-amber-400">{totalWarning}</p>
-                        <p className="text-xs text-amber-400/60">⚠️ Atenção</p>
-                    </Card>
-                    <Card className="relative overflow-hidden p-4 border-red-500/20 bg-red-500/5">
-                        <div className="absolute -right-6 -top-6 size-16 rounded-full bg-red-500 opacity-15 blur-xl" />
-                        <p className="text-xs text-red-400">Erros</p>
-                        <p className="mt-1 font-display text-2xl text-red-400">{totalError}</p>
-                        <p className="text-xs text-red-400/60">❌ Crítico</p>
-                    </Card>
-                </section>
-            )}
-
-            {/* Lista de integrações com diagnóstico */}
-            {diagnosticos && diagnosticos.length > 0 && (
-                <Card className="relative overflow-hidden border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-                    <div className="p-6">
-                        <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
-                            🔌 Status de Todas as Integrações
-                        </h2>
-                        <div className="space-y-2">
-                            {diagnosticos.map((d, i) => (
-                                <div
-                                    key={i}
-                                    className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:bg-slate-800/50 ${getStatusColor(d.diagnostico.status)}`}
-                                >
-                                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <span className="text-xl shrink-0">{d.icone}</span>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-sm font-semibold">{d.nome}</span>
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-muted-foreground font-mono uppercase">{d.tipo}</span>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                                                {d.diagnostico.mensagem}
-                                            </p>
-                                            {d.diagnostico.sugestoes.length > 0 && (
-                                                <div className="mt-1.5 space-y-0.5">
-                                                    {d.diagnostico.sugestoes.slice(0, 2).map((s, j) => (
-                                                        <p key={j} className="text-xs text-muted-foreground/70">
-                                                            💡 {s}
-                                                        </p>
-                                                    ))}
+                        historicoRespostas.map((msg, i) => (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                            >
+                                <div className={`flex items-start gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                                    <div className={`mt-1 size-8 rounded-lg flex items-center justify-center border shrink-0 ${msg.role === 'user'
+                                            ? 'bg-primary/10 border-primary/20 text-primary'
+                                            : 'bg-slate-800 border-slate-700 text-slate-300'
+                                        }`}>
+                                        {msg.role === 'user' ? <Terminal className="size-4" /> : <Bot className="size-4" />}
+                                    </div>
+                                    <div className={`space-y-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                        <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                                                ? 'bg-primary text-primary-foreground rounded-tr-none'
+                                                : 'bg-slate-900/80 border border-slate-800 rounded-tl-none text-slate-200'
+                                            }`}>
+                                            {msg.isDiagnostic ? (
+                                                <div className="space-y-4">
+                                                    <p className="font-medium text-emerald-400 flex items-center gap-2">
+                                                        <CheckCircle2 className="size-4" />
+                                                        Sistema Escaneado
+                                                    </p>
+                                                    <p>{msg.content}</p>
+                                                    {diagnosticos && (
+                                                        <div className="grid grid-cols-1 gap-2 mt-4">
+                                                            {diagnosticos.map((d, idx) => (
+                                                                <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-slate-950/50 border border-white/5">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-base">{d.icone}</span>
+                                                                        <span className="text-xs font-medium">{d.nome}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {d.diagnostico.status === 'ok' ? (
+                                                                            <CheckCircle2 className="size-3 text-emerald-500" />
+                                                                        ) : d.diagnostico.status === 'warning' ? (
+                                                                            <AlertCircle className="size-3 text-amber-500" />
+                                                                        ) : (
+                                                                            <XCircle className="size-3 text-red-500" />
+                                                                        )}
+                                                                        <span className={`text-[10px] font-bold ${d.diagnostico.status === 'ok' ? 'text-emerald-500' :
+                                                                                d.diagnostico.status === 'warning' ? 'text-amber-500' : 'text-red-500'
+                                                                            }`}>
+                                                                            {d.diagnostico.status.toUpperCase()}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="whitespace-pre-wrap font-sans">
+                                                    {msg.content}
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                                        {getStatusBadge(d.diagnostico.status)}
-                                        {d.diagnostico.status !== "ok" && (
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                className="text-xs h-7 px-2 hover:bg-cyan-500/10 hover:text-cyan-400"
-                                                onClick={() => handleResolverIntegracao(d)}
-                                                disabled={carregando}
-                                            >
-                                                {modoResolucao && integracaoSelecionada?.nome === d.nome ? (
-                                                    <span className="animate-spin">🔄</span>
-                                                ) : (
-                                                    "🔧 Resolver"
-                                                )}
-                                            </Button>
-                                        )}
+                                        <p className="text-[10px] text-muted-foreground px-1">{msg.timestamp}</p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                </Card>
-            )}
-
-            {/* Relatório de saúde */}
-            {relatorio && (
-                <Card className="relative overflow-hidden p-6 border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-                    <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
-                        📊 Relatório de Saúde
-                    </h2>
-                    <div className="bg-slate-800/50 rounded-lg p-4 max-h-96 overflow-y-auto">
-                        <pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
-                            {relatorio}
-                        </pre>
-                    </div>
-                </Card>
-            )}
-
-            {/* Chat com o Agente */}
-            <Card className="relative overflow-hidden p-6 border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-                <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-cyan-500/5 to-transparent pointer-events-none" />
-                <div className="relative">
-                    <h2 className="text-base font-semibold mb-2 flex items-center gap-2">
-                        💬 Perguntar ao Agente
-                    </h2>
-                    <p className="text-xs text-muted-foreground mb-4">
-                        Pergunte sobre <strong>qualquer integração</strong> — Supabase, Stripe, PushinPay, N8N, UTMify, Vercel, ou qualquer erro do projeto
-                    </p>
-
-                    {/* Atalhos rápidos */}
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {[
-                            { label: "Supabase", q: "Como verifico se o Supabase está conectado corretamente e as tabelas estão criadas?" },
-                            { label: "Stripe", q: "Como faço para testar um pagamento real com Stripe no meu checkout?" },
-                            { label: "PushinPay", q: "Como configuro o PushinPay para gerar QR Code PIX no checkout?" },
-                            { label: "N8N", q: "Como conecto o N8N para enviar emails automáticos após uma compra?" },
-                            { label: "Deploy", q: "Quais variáveis preciso configurar na Vercel para o deploy funcionar?" },
-                        ].map((atalho) => (
-                            <button
-                                key={atalho.label}
-                                onClick={() => setPerguntaTexto(atalho.q)}
-                                className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/50 text-slate-400 
-                  hover:text-cyan-400 hover:border-cyan-500/30 hover:bg-cyan-500/10 transition-all duration-200"
-                            >
-                                {atalho.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    <Textarea
-                        value={perguntaTexto}
-                        onChange={(e) => setPerguntaTexto(e.target.value)}
-                        placeholder="Ex: Por que meu PIX não está gerando QR code? / Como faço o webhook do Stripe funcionar? / Meu deploy na Vercel deu erro..."
-                        className="min-h-[80px] bg-slate-800/50 border-slate-700/50 resize-none"
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handlePerguntar();
-                            }
-                        }}
-                    />
-                    <Button
-                        onClick={handlePerguntar}
-                        disabled={carregando || !perguntaTexto.trim()}
-                        className="mt-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg shadow-purple-900/20"
-                    >
-                        {carregando && !modoResolucao ? (
-                            <span className="flex items-center gap-2"><span className="animate-spin">🔄</span> Pensando...</span>
-                        ) : (
-                            "Enviar para o Agente"
-                        )}
-                    </Button>
-
-                    {erro && (
-                        <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                            ❌ {erro}
-                        </div>
+                            </motion.div>
+                        ))
                     )}
-                </div>
-            </Card>
-
-            {/* Histórico de Respostas */}
-            {historicoRespostas.length > 0 && (
-                <Card className="relative overflow-hidden p-6 border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-base font-semibold flex items-center gap-2">
-                            📋 Histórico ({historicoRespostas.length})
-                        </h2>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-muted-foreground hover:text-red-400"
-                            onClick={() => setHistoricoRespostas([])}
-                        >
-                            Limpar
-                        </Button>
-                    </div>
-                    <div className="space-y-4 max-h-[500px] overflow-y-auto">
-                        {historicoRespostas.map((item, i) => (
-                            <div key={i} className="space-y-2">
-                                {/* Pergunta */}
-                                <div className="flex justify-end">
-                                    <div className="max-w-[85%] p-3 rounded-xl bg-cyan-600/15 border border-cyan-500/20">
-                                        <p className="text-sm text-cyan-300">{item.pergunta}</p>
-                                        <p className="text-[10px] text-cyan-400/50 mt-1">{item.timestamp}</p>
-                                    </div>
+                    {carregando && (
+                        <div className="flex justify-start">
+                            <div className="flex items-start gap-3">
+                                <div className="mt-1 size-8 rounded-lg flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-300">
+                                    <Bot className="size-4 animate-pulse" />
                                 </div>
-                                {/* Resposta */}
-                                <div className="flex justify-start">
-                                    <div className="max-w-[85%] p-3 rounded-xl bg-slate-800/50 border border-slate-700/30">
-                                        <div className="flex items-center gap-1.5 mb-1.5">
-                                            <span className="text-xs">🤖</span>
-                                            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                                                Agente SharkPay
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
-                                            {item.resposta}
-                                        </p>
+                                <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl rounded-tl-none">
+                                    <div className="flex gap-1">
+                                        <span className="size-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:-0.3s]" />
+                                        <span className="size-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:-0.15s]" />
+                                        <span className="size-1.5 rounded-full bg-primary/40 animate-bounce" />
                                     </div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </Card>
-            )}
+                        </div>
+                    )}
+                </div>
 
-            {/* Info Card */}
-            <Card className="p-4 text-sm text-muted-foreground border border-border/40">
-                <p className="flex items-center gap-2">
-                    <span>🧠</span>
-                    <span>
-                        Modelos: <code className="text-xs bg-slate-800 px-1.5 py-0.5 rounded">arcee-ai/trinity-large-preview</code> (primário)
-                        + <code className="text-xs bg-slate-800 px-1.5 py-0.5 rounded">stepfun/step-3-5-flash</code> (fallback) —
-                        <strong className="text-emerald-400"> 100% gratuitos</strong> via OpenRouter
-                    </span>
-                </p>
+                {/* Input Area */}
+                <div className="p-4 border-t border-border/40 bg-slate-950/20 backdrop-blur-md">
+                    <div className="max-w-4xl mx-auto flex items-end gap-2 relative">
+                        <div className="flex-1 relative group">
+                            <Textarea
+                                value={perguntaTexto}
+                                onChange={(e) => setPerguntaTexto(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handlePerguntar();
+                                    }
+                                }}
+                                placeholder="Descreva um problema ou peça um diagnóstico..."
+                                className="min-h-[56px] max-h-[200px] w-full bg-slate-900/50 border-border/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20 rounded-2xl pr-12 py-4 resize-none transition-all"
+                            />
+                            <div className="absolute left-4 -top-3 px-2 flex gap-2">
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900 border border-border/40 text-[10px] text-muted-foreground">
+                                    <ShieldCheck className="size-3 text-emerald-500" />
+                                    <span>Seguro</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-900 border border-border/40 text-[10px] text-muted-foreground">
+                                    <Code2 className="size-3 text-blue-500" />
+                                    <span>v2.4</span>
+                                </div>
+                            </div>
+                        </div>
+                        <Button
+                            className="h-[56px] w-[56px] rounded-2xl bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 shrink-0"
+                            onClick={handlePerguntar}
+                            disabled={carregando || !perguntaTexto.trim()}
+                        >
+                            <Send className="size-5" />
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Side Actions Overlay (Responsive) */}
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden lg:flex flex-col gap-3 group">
+                    <Button
+                        size="icon"
+                        variant="secondary"
+                        className="rounded-xl shadow-xl border border-white/10 hover:scale-110 active:scale-95 transition-all"
+                        onClick={handleDiagnostico}
+                        title="Diagnosticar Tudo"
+                    >
+                        <Search className="size-5" />
+                    </Button>
+                    <Button
+                        size="icon"
+                        variant="secondary"
+                        className="rounded-xl shadow-xl border border-white/10 hover:scale-110 active:scale-95 transition-all"
+                        onClick={handleGerarRelatorio}
+                        title="Relatório de Saúde"
+                    >
+                        <FileText className="size-5" />
+                    </Button>
+                    <Button
+                        size="icon"
+                        variant="secondary"
+                        className="rounded-xl shadow-xl border border-white/10 hover:scale-110 active:scale-95 transition-all"
+                        onClick={() => {
+                            verificarDisponibilidade();
+                            toast.info("Status do agente atualizado");
+                        }}
+                        title="Testar Conexão"
+                    >
+                        <RefreshCw className="size-5" />
+                    </Button>
+                </div>
             </Card>
+
+            {/* AI Model Footer */}
+            <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground/60 font-mono uppercase tracking-[0.2em] mb-4">
+                <span>Trinity v1.2</span>
+                <span className="size-1 rounded-full bg-border" />
+                <span>SharkPay Neural Engine</span>
+                <span className="size-1 rounded-full bg-border" />
+                <span>OpenRouter Cloud</span>
+            </div>
         </div>
     );
 }

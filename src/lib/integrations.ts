@@ -5,7 +5,7 @@ export interface IntegrationSettings {
     type: 'payment' | 'tracking' | 'n8n';
     name: string;
     enabled: boolean;
-    config: Record<string, any>;
+    config: Record<string, string | number | boolean | null>;
     updated_at?: string;
 }
 
@@ -32,7 +32,7 @@ export const integrationService = {
         if (error) {
             console.warn("Erro ao salvar no Supabase, salvando no localStorage:", error);
             const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
-            let existing: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
+            const existing: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
             const index = existing.findIndex(s => s.id === settings.id);
             if (index >= 0) existing[index] = settings;
             else existing.push(settings);
@@ -40,7 +40,7 @@ export const integrationService = {
         }
     },
 
-    async sendToN8N(payload: any): Promise<boolean> {
+    async sendToN8N(payload: Record<string, unknown>): Promise<boolean> {
         const n8nConfigs = await this.getSettings('n8n');
         const webhook = n8nConfigs.find(c => c.id === 'main_webhook' && c.enabled);
 

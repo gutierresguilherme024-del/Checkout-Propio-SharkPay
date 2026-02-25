@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check } from "lucide-react";
+import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check, Link, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 interface Product {
@@ -19,66 +19,148 @@ interface Product {
     criado_em?: string;
     stripe_product_id?: string;
     stripe_price_id?: string;
+    checkout_slug?: string | null;
 }
 
+const APP_URL = window.location.origin;
+
+import { supabase as supabaseClient } from "@/lib/supabase/client";
+
 // Funções de API — chamam o backend serverless (service_role key fica no servidor)
+// Adicionado fallback direto para o cliente Supabase caso a API local (Vercel Functions) não esteja rodando
 async function apiListarProdutos(): Promise<Product[]> {
-    const res = await fetch('/api/produtos');
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao listar produtos');
+    try {
+        const res = await fetch('/api/produtos');
+        if (res.ok) {
+            const data = await res.json();
+            return data.produtos || [];
+        }
+    } catch (e) {
+        console.warn("API de produtos offline, tentando Supabase direto...", e);
     }
-    const data = await res.json();
-    return data.produtos || [];
+
+    // Fallback: busca direta se a rota de API falhar (comum em npm run dev local)
+    const { data, error } = await supabaseClient
+        .from('produtos' as any)
+        .select('*')
+        .order('criado_em', { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data as any[] || [];
 }
 
 async function apiCriarProduto(produto: Omit<Product, 'id' | 'criado_em'>): Promise<Product> {
-    const res = await fetch('/api/produtos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(produto)
-    });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao criar produto');
+    try {
+        const res = await fetch('/api/produtos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(produto)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data.produto;
+        }
+    } catch (e) {
+        console.warn("API de produtos offline para POST, tentando Supabase direto...");
     }
-    const data = await res.json();
-    return data.produto;
+
+    const { data, error } = await supabaseClient
+        .from('produtos' as any)
+        .insert([{
+            ...produto,
+            checkout_slug: (produto as any).checkout_slug || gerarSlugLocal(produto.nome),
+            atualizado_em: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data as any;
 }
 
 async function apiExcluirProduto(id: string): Promise<void> {
-    const res = await fetch(`/api/produtos?id=${id}`, { method: 'DELETE' });
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao excluir produto');
+    try {
+        const res = await fetch(`/api/produtos?id=${id}`, { method: 'DELETE' });
+        if (res.ok) return;
+    } catch (e) {
+        console.warn("API de produtos offline para DELETE, tentando Supabase direto...");
     }
+
+    const { error } = await supabaseClient
+        .from('produtos' as any)
+        .delete()
+        .eq('id', id);
+
+    if (error) throw new Error(error.message);
+}
+
+async function apiAtualizarProduto(id: string, campos: Record<string, any>): Promise<Product> {
+    try {
+        const res = await fetch(`/api/produtos?id=${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(campos)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data.produto;
+        }
+    } catch (e) {
+        console.warn("API de produtos offline para PUT, tentando Supabase direto...");
+    }
+
+    const { data, error } = await supabaseClient
+        .from('produtos' as any)
+        .update({ ...campos, atualizado_em: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data as any;
 }
 
 async function apiUploadArquivo(file: File): Promise<{ path: string; url: string }> {
-    // Converter arquivo para base64
-    const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+    try {
+        const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
 
-    const res = await fetch('/api/produtos/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            base64,
-            mimeType: file.type,
-            fileName: file.name
-        })
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Erro no upload' }));
-        throw new Error(err.error || 'Erro ao fazer upload');
+        const res = await fetch('/api/produtos/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64, mimeType: file.type, fileName: file.name })
+        });
+        if (res.ok) return res.json();
+    } catch (e) {
+        console.warn("API de upload offline, tentando upload direto...");
     }
-    return res.json();
-}
 
+    // Fallback: upload direto via cliente Supabase para o bucket 'produtos-pdf'
+    const ext = file.name.split('.').pop() || 'bin'
+    const uniqueFileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+
+    const { data, error } = await supabaseClient.storage
+        .from('produtos-pdf')
+        .upload(uniqueFileName, file, {
+            contentType: file.type,
+            upsert: true
+        });
+
+    if (error) throw error;
+
+    const { data: urlData } = supabaseClient.storage
+        .from('produtos-pdf')
+        .getPublicUrl(data.path);
+
+    return {
+        path: data.path,
+        url: urlData.publicUrl
+    };
+}
 
 async function criarProdutoNoStripe(nome: string, preco: number, descricao: string) {
     try {
@@ -96,13 +178,29 @@ async function criarProdutoNoStripe(nome: string, preco: number, descricao: stri
     }
 }
 
+function getCheckoutUrl(slug: string | null | undefined) {
+    if (!slug) return null;
+    return `${APP_URL}/checkout/${slug}`;
+}
+
+function gerarSlugLocal(nome: string): string {
+    const base = nome
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .substring(0, 40);
+    const sufixo = Math.random().toString(36).substring(2, 6);
+    return `${base}-${sufixo}`;
+}
+
 export default function AdminProducts() {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
-    const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
     const [nome, setNome] = useState("");
     const [preco, setPreco] = useState("");
@@ -119,6 +217,21 @@ export default function AdminProducts() {
         setLoading(true);
         try {
             const data = await apiListarProdutos();
+
+            // Gerar slug para produtos que não têm (produtos legacy)
+            const produtosParaAtualizar = data.filter(p => !p.checkout_slug);
+            for (const p of produtosParaAtualizar) {
+                try {
+                    const atualizado = await apiAtualizarProduto(p.id, {
+                        checkout_slug: gerarSlugLocal(p.nome)
+                    });
+                    const idx = data.findIndex(x => x.id === p.id);
+                    if (idx >= 0) data[idx] = atualizado;
+                } catch {
+                    // Ignora se falhar
+                }
+            }
+
             setProducts(data);
         } catch (err: any) {
             console.error("Erro ao buscar produtos:", err);
@@ -135,13 +248,11 @@ export default function AdminProducts() {
         }
 
         setIsSaving(true);
-        setCheckoutUrl(null);
 
         try {
             let imagem_url: string | null = null;
             let pdf_storage_key: string | null = null;
 
-            // Upload via API serverless (usa service_role no backend)
             if (imageFile) {
                 toast.info("Enviando imagem...");
                 const uploadResult = await apiUploadArquivo(imageFile);
@@ -169,15 +280,17 @@ export default function AdminProducts() {
                 stripe_price_id: stripeData?.stripe_price_id || null,
             });
 
-            if (stripeData?.checkout_url) {
-                setCheckoutUrl(stripeData.checkout_url);
-                toast.success("Produto criado e sincronizado com Stripe!");
+            const checkoutLink = getCheckoutUrl(novoProduto.checkout_slug);
+
+            if (checkoutLink) {
+                navigator.clipboard.writeText(checkoutLink);
+                toast.success("Produto criado! Link de checkout copiado ✅");
             } else {
                 toast.success("Produto criado com sucesso!");
-                resetForm();
             }
 
             setProducts(prev => [novoProduto, ...prev]);
+            resetForm();
         } catch (err: any) {
             console.error("Erro ao salvar produto:", err);
             toast.error(`Erro ao salvar produto: ${err.message || 'Erro desconhecido'}`);
@@ -194,13 +307,10 @@ export default function AdminProducts() {
         setImageFile(null);
         setPdfFile(null);
         setIsAdding(false);
-        setCheckoutUrl(null);
-        setCopied(false);
     }
 
     async function handleDelete(id: string) {
         if (!confirm("Tem certeza que deseja excluir este produto?")) return;
-
         try {
             await apiExcluirProduto(id);
             setProducts(prev => prev.filter(p => p.id !== id));
@@ -211,14 +321,17 @@ export default function AdminProducts() {
         }
     }
 
-    const copyToClipboard = () => {
-        if (checkoutUrl) {
-            navigator.clipboard.writeText(checkoutUrl);
-            setCopied(true);
-            toast.success("Link copiado!");
-            setTimeout(() => setCopied(false), 2000);
+    function copyCheckoutLink(product: Product) {
+        const url = getCheckoutUrl(product.checkout_slug);
+        if (url) {
+            navigator.clipboard.writeText(url);
+            setCopiedId(product.id);
+            toast.success(`Link copiado: ${url}`);
+            setTimeout(() => setCopiedId(null), 2500);
+        } else {
+            toast.error("Produto não possui link de checkout.");
         }
-    };
+    }
 
     return (
         <div className="space-y-6">
@@ -227,43 +340,12 @@ export default function AdminProducts() {
                     <h2 className="text-3xl font-bold tracking-tight">Produtos Digitais</h2>
                     <p className="text-muted-foreground">Cadastre seus e-books e produtos com entrega automática.</p>
                 </div>
-                {!isAdding && !checkoutUrl && (
+                {!isAdding && (
                     <Button onClick={() => setIsAdding(true)} className="gap-2">
                         <Plus className="size-4" /> Novo Produto
                     </Button>
                 )}
             </div>
-
-            {checkoutUrl && (
-                <div className="mt-4 p-6 bg-slate-900 border border-indigo-500/30 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-500">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="bg-indigo-500/10 p-2 rounded-lg">
-                            <Package className="size-5 text-indigo-400" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-white">Link de Checkout Gerado!</h3>
-                            <p className="text-sm text-slate-400">Use este link para vender seu produto diretamente pelo Stripe.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3 bg-slate-950 p-4 rounded-lg border border-slate-800">
-                        <span className="text-sm text-slate-300 truncate flex-1 font-mono">{checkoutUrl}</span>
-                        <Button
-                            onClick={copyToClipboard}
-                            variant={copied ? "outline" : "default"}
-                            className="gap-2 transition-all"
-                            size="sm"
-                        >
-                            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                            {copied ? "Copiado!" : "Copiar Link"}
-                        </Button>
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                        <Button variant="ghost" onClick={resetForm} size="sm">
-                            Criar outro produto
-                        </Button>
-                    </div>
-                </div>
-            )}
 
             {isAdding && (
                 <Card className="border-primary/20 shadow-lg">
@@ -292,26 +374,14 @@ export default function AdminProducts() {
                             <div className="space-y-2">
                                 <Label htmlFor="imagem_capa">Imagem de Capa (Opcional)</Label>
                                 <div className="flex items-center gap-2">
-                                    <Input
-                                        id="imagem_capa"
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={e => setImageFile(e.target.files?.[0] || null)}
-                                        className="cursor-pointer"
-                                    />
+                                    <Input id="imagem_capa" type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="cursor-pointer" />
                                     {imageFile && <ImageIcon className="size-5 text-primary" />}
                                 </div>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="arquivo_pdf">Arquivo PDF (Opcional)</Label>
                                 <div className="flex items-center gap-2">
-                                    <Input
-                                        id="arquivo_pdf"
-                                        type="file"
-                                        accept=".pdf"
-                                        onChange={e => setPdfFile(e.target.files?.[0] || null)}
-                                        className="cursor-pointer"
-                                    />
+                                    <Input id="arquivo_pdf" type="file" accept=".pdf" onChange={e => setPdfFile(e.target.files?.[0] || null)} className="cursor-pointer" />
                                     {pdfFile && <FileText className="size-5 text-red-500" />}
                                 </div>
                             </div>
@@ -347,37 +417,84 @@ export default function AdminProducts() {
                     <Button variant="outline" onClick={() => setIsAdding(true)}>Começar agora</Button>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {products.map(product => (
-                        <Card key={product.id} className={`group overflow-hidden transition-all duration-300 ${!product.ativo ? 'opacity-60' : 'hover:border-primary/50 shadow-md'}`}>
-                            <CardHeader className="pb-2 space-y-1">
-                                <div className="flex justify-between items-start">
-                                    <div className={`p-2 rounded-lg ${product.ativo ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                                        <Package className="size-5" />
+                <div className="space-y-4">
+                    {products.map(product => {
+                        const checkoutUrl = getCheckoutUrl(product.checkout_slug);
+                        const isCopied = copiedId === product.id;
+
+                        return (
+                            <Card key={product.id} className={`group overflow-hidden transition-all duration-300 ${!product.ativo ? 'opacity-60' : 'hover:border-primary/50 shadow-md'}`}>
+                                <CardContent className="p-5">
+                                    <div className="flex flex-col md:flex-row md:items-center gap-4">
+                                        {/* Info do Produto */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`p-0 rounded-lg overflow-hidden size-12 flex-shrink-0 border border-border ${product.ativo ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                                                {product.imagem_url ? (
+                                                    <img src={product.imagem_url} alt={product.nome} className="size-full object-cover" />
+                                                ) : (
+                                                    <div className="size-full flex items-center justify-center">
+                                                        <Package className="size-5" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-semibold truncate">{product.nome}</h3>
+                                                    {!product.ativo && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground uppercase font-bold shrink-0">Inativo</span>}
+                                                </div>
+                                                <p className="text-sm text-muted-foreground line-clamp-1">{product.descricao || "Sem descrição"}</p>
+                                            </div>
+                                        </div>
+                                        {/* Preço */}
+                                        <div className="text-xl font-bold text-primary whitespace-nowrap">
+                                            R$ {product.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                        </div>
+
+                                        {/* Ações */}
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button
+                                                variant={isCopied ? "outline" : "default"}
+                                                size="sm"
+                                                className="gap-2 transition-all"
+                                                onClick={() => copyCheckoutLink(product)}
+                                                disabled={!checkoutUrl}
+                                            >
+                                                {isCopied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
+                                                {isCopied ? "Copiado!" : "Copiar Link"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-2"
+                                                onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
+                                                disabled={!checkoutUrl}
+                                            >
+                                                <ExternalLink className="size-4" />
+                                                Abrir
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} className="text-destructive h-8 w-8">
+                                                <Trash2 className="size-4" />
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} className="text-destructive h-8 w-8">
-                                            <Trash2 className="size-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <CardTitle className="text-lg truncate">{product.nome}</CardTitle>
-                                    {!product.ativo && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground uppercase font-bold">Inativo</span>}
-                                </div>
-                                <CardDescription className="line-clamp-1">{product.descricao || "Sem descrição"}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="pt-2">
-                                <div className="text-xl font-bold text-primary mb-4">
-                                    R$ {product.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/50 p-2 rounded border border-transparent group-hover:border-primary/20 transition-colors">
-                                        <FileText className="size-3 shrink-0 text-red-400" />
-                                        <span className="truncate">PDF: {product.pdf_storage_key ? "Vinculado" : "Não enviado"}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
-                                        <span>Criado em: {product.criado_em ? new Date(product.criado_em).toLocaleDateString() : '-'}</span>
+
+                                    {/* Link do Checkout */}
+                                    {checkoutUrl && (
+                                        <div className="mt-3 p-3 bg-muted/50 rounded-lg border border-border flex items-center gap-3">
+                                            <Link className="size-4 text-primary shrink-0" />
+                                            <code className="text-xs text-foreground truncate flex-1 font-mono">{checkoutUrl}</code>
+                                        </div>
+                                    )}
+
+                                    {/* Metadados */}
+                                    <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex items-center gap-1">
+                                                <FileText className="size-3 text-red-400" />
+                                                PDF: {product.pdf_storage_key ? "Vinculado" : "Não enviado"}
+                                            </span>
+                                            <span>Criado em: {product.criado_em ? new Date(product.criado_em).toLocaleDateString() : '-'}</span>
+                                        </div>
                                         <div className="flex gap-2">
                                             {product.stripe_product_id && (
                                                 <div className="flex items-center gap-1 text-green-500 font-bold">
@@ -386,10 +503,10 @@ export default function AdminProducts() {
                                             )}
                                         </div>
                                     </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
                 </div>
             )}
         </div>

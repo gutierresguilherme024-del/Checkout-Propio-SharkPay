@@ -40,7 +40,7 @@ export default function Login() {
     }
 
     return (
-        <div className='min-h-screen flex items-center justify-center bg-slate-950 px-4 relative'>
+        <div className='min-h-screen flex items-center justify-center bg-background px-4 relative'>
             <div className="sco-page-topbar">
                 <Button asChild variant="ghost" size="sm" className="text-slate-400 hover:text-white gap-2 h-9 px-3">
                     <NavLink to="/">
@@ -49,27 +49,27 @@ export default function Login() {
                     </NavLink>
                 </Button>
             </div>
-            <div className='w-full max-w-sm bg-slate-900 rounded-2xl p-8 shadow-2xl border border-slate-800'>
+            <div className='w-full max-w-sm bg-card rounded-2xl p-8 shadow-2xl border border-border'>
                 <div className='flex justify-center mb-8'>
                     <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent'>
                         SharkPay
                     </h1>
                 </div>
-                <h2 className='text-xl font-semibold text-white mb-6 text-center'>
+                <h2 className='text-xl font-semibold text-foreground mb-6 text-center'>
                     {isLogin ? 'Acesso Administrativo' : 'Criar Conta'}
                 </h2>
 
                 <div className='space-y-4'>
                     <div>
-                        <label className='block text-sm font-medium text-slate-400 mb-1 ml-1'>Email</label>
+                        <label className='block text-sm font-medium text-muted-foreground mb-1 ml-1'>Email</label>
                         <input
                             type='email'
                             placeholder='seu@email.com'
                             value={email}
                             onChange={e => setEmail(e.target.value)}
-                            className='w-full px-4 py-3 rounded-xl bg-slate-800 text-white
-                         border border-slate-700 focus:border-indigo-500
-                         focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all'
+                            className='w-full px-4 py-3 rounded-xl bg-muted/50 text-foreground
+                         border border-border focus:border-primary
+                         focus:outline-none focus:ring-1 focus:ring-primary transition-all'
                         />
                     </div>
                     <div>
@@ -80,9 +80,9 @@ export default function Login() {
                             value={senha}
                             onChange={e => setSenha(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleAuth()}
-                            className='w-full px-4 py-3 rounded-xl bg-slate-800 text-white
-                         border border-slate-700 focus:border-indigo-500
-                         focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all'
+                            className='w-full px-4 py-3 rounded-xl bg-muted/50 text-foreground
+                         border border-border focus:border-primary
+                         focus:outline-none focus:ring-1 focus:ring-primary transition-all'
                         />
                     </div>
 
@@ -103,7 +103,7 @@ export default function Login() {
 
                     <button
                         onClick={() => setIsLogin(!isLogin)}
-                        className='w-full text-slate-400 text-sm hover:text-white transition-colors'
+                        className='w-full text-muted-foreground text-sm hover:text-foreground transition-colors'
                     >
                         {isLogin ? 'Não tem conta? Crie uma agora' : 'Já tem conta? Faça login'}
                     </button>

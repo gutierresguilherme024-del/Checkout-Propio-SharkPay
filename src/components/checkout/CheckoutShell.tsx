@@ -109,7 +109,7 @@ function PixModal({
   }, [onClose]);
 
   const doCopy = async () => {
-    try { await navigator.clipboard.writeText(pixValue); } catch { }
+    try { await navigator.clipboard.writeText(pixValue); } catch (err) { console.warn("Erro ao copiar PIX:", err); }
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -226,11 +226,12 @@ export type CheckoutShellProps = {
   product?: {
     name: string;
     price: number;
+    image_url?: string | null;
     delivery_content: string;
   } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
-  onPaySuccess?: (data: any) => void;
+  onPaySuccess?: (data: { qr_code?: string; qr_code_text?: string; id?: string }) => void;
 };
 
 export function CheckoutShell({
@@ -243,10 +244,17 @@ export function CheckoutShell({
   /* integration status */
   const { payments, tracking, getStatus, loading } = useIntegrations();
 
-  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments, getStatus]);
+  const isStripeActive = useMemo(() => {
+    return getStatus(payments, 'stripe') === 'active';
+  }, [payments, getStatus]);
+
   const isPushinPayActive = useMemo(() => {
     const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
     return getStatus(payments, 'pushinpay') === 'active' || (!!token && token !== 'pp_live_placeholder');
+  }, [payments, getStatus]);
+
+  const isMundPayActive = useMemo(() => {
+    return getStatus(payments, 'mundpay') === 'active';
   }, [payments, getStatus]);
 
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
@@ -274,14 +282,16 @@ export function CheckoutShell({
   const [consent, setConsent] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pixOpen, setPixOpen] = useState(false);
-  const [localPixData, setLocalPixData] = useState<any>(null);
+  const [localPixData, setLocalPixData] = useState<{ qr_code?: string; qr_code_text?: string; expires_at?: string } | null>(null);
 
   // Se o método padrão não estiver disponível, troca para o outro
   useEffect(() => {
     if (loading) return;
     if (method === 'card' && !isStripeActive && isPushinPayActive) setMethod('pix');
+    else if (method === 'card' && !isStripeActive && !isPushinPayActive && isMundPayActive) setMethod('card'); // MundPay handles card too
+
     if (method === 'pix' && !isPushinPayActive && isStripeActive) setMethod('card');
-  }, [isStripeActive, isPushinPayActive, loading, method]);
+  }, [isStripeActive, isPushinPayActive, isMundPayActive, loading, method]);
 
   const amount = displayProduct.price;
   const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
@@ -350,7 +360,26 @@ export function CheckoutShell({
     };
 
     // Enviar para o n8n (se configurado)
-    await integrationService.sendToN8N(payload);
+    try {
+      if (mode !== "preview") {
+        await integrationService.sendToN8N(payload);
+      }
+    } catch (err) {
+      console.warn("Erro ao enviar para n8n:", err);
+    }
+
+    if (mode === "preview") {
+      toast.info("Processamento simulado (Modo Preview)");
+      if (method === "pix") {
+        setLocalPixData({
+          qr_code_text: "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5913SHARKPAY6009SAO PAULO62070503***6304ABCD"
+        });
+        setPixOpen(true);
+      } else {
+        toast.success("Simulação de Cartão: Sucesso!");
+      }
+      return;
+    }
 
     if (method === "pix") {
       try {
@@ -367,31 +396,60 @@ export function CheckoutShell({
         setPixOpen(true);
         onPaySuccess?.(data);
         toast.success("QR Code gerado com sucesso!");
-      } catch (err: any) {
-        toast.error(err.message || "Erro ao gerar PIX");
+      } catch (err) {
+        const error = err as Error;
+        console.error('Erro PIX:', error);
+        const msg = error.message || "";
+        if (msg.includes("PushinPay não configurado")) {
+          toast.error("Pagamento via PIX temporariamente indisponível (Token não configurado).");
+        } else {
+          toast.error(msg || "Erro ao gerar PIX");
+        }
       } finally {
         setIsGeneratingPix(false);
       }
     } else {
-      // Pagamento REAL com Stripe Checkout
+      // Prioridade: Stripe -> MundPay
       try {
         setIsGeneratingPix(true);
         const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
         const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        const { checkout_url } = await criarCheckoutStripe({
-          nome: displayProduct.name,
-          preco: amount,
-          email,
-          pedido_id: pedidoId,
-          checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
-          utm_source: utms.utm_source
-        });
-        // Redirecionar para o Stripe Checkout
-        if (checkout_url) {
-          window.location.href = checkout_url;
+
+        if (isStripeActive) {
+          const { checkout_url } = await criarCheckoutStripe({
+            nome: displayProduct.name,
+            preco: amount,
+            email,
+            pedido_id: pedidoId,
+            checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
+            utm_source: utms.utm_source
+          });
+          if (checkout_url) window.location.href = checkout_url;
+        } else if (isMundPayActive) {
+          // Lógica MundPay
+          const resp = await fetch('/api/mundpay/criar-venda', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              valor: amount,
+              email,
+              nome: name,
+              pedido_id: pedidoId,
+              utm_source: utms.utm_source
+            })
+          });
+          const data = await resp.json();
+          if (data.checkout_url) {
+            window.location.href = data.checkout_url;
+          } else {
+            toast.success("Pedido MundPay criado! Redirecionando...");
+          }
+        } else {
+          toast.error("Nenhum processador de cartão ativo");
         }
-      } catch (err: any) {
-        toast.error(err.message || "Erro ao processar pagamento");
+      } catch (err) {
+        const error = err as Error;
+        toast.error(error.message || "Erro ao processar pagamento");
       } finally {
         setIsGeneratingPix(false);
       }
@@ -426,17 +484,24 @@ export function CheckoutShell({
             </div>
 
             <div className="sco-sum-product">
-              <p className="sco-sum-eyebrow">Produto</p>
+              <div className="sco-sum-img-wrap">
+                {displayProduct.image_url ? (
+                  <img src={displayProduct.image_url} alt={displayProduct.name} className="sco-sum-img" />
+                ) : (
+                  <div className="sco-sum-img-placeholder">
+                    <Ico.Card />
+                  </div>
+                )}
+              </div>
+              <p className="sco-sum-eyebrow">Você está comprando</p>
               <h1 className="sco-sum-name">{displayProduct.name}</h1>
               <p className="sco-sum-desc">{settings.subheadline}</p>
             </div>
 
             <div className="sco-sum-price-row">
-              <span>Total hoje</span>
+              <span>Total a pagar</span>
               <strong>{fmtBRL(amount)}</strong>
             </div>
-
-            <div className="sco-sum-divider" />
 
             {/* includes list */}
             <ul className="sco-sum-features">
@@ -499,6 +564,13 @@ export function CheckoutShell({
                     className={cn("sco-tab", method === "pix" && "sco-tab--on")}
                     onClick={() => setMethod("pix")}>
                     <Ico.Pix /> Pix
+                  </button>
+                )}
+                {!isStripeActive && isMundPayActive && (
+                  <button role="tab" aria-selected={method === "card"} id="tab-card"
+                    className={cn("sco-tab", method === "card" && "sco-tab--on")}
+                    onClick={() => setMethod("card")}>
+                    <Ico.Lock /> MundPay
                   </button>
                 )}
                 {!isStripeActive && !isPushinPayActive && !loading && (

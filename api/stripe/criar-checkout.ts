@@ -1,74 +1,74 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-    apiVersion: '2025-01-27' as any,
-})
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-const supabase = createClient(
-    process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
-)
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+    // Garantir que a resposta seja sempre JSON
+    res.setHeader('Content-Type', 'application/json')
 
-export default async function handler(req: any, res: any) {
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-    try {
-        const { produto_id, nome, preco, email, pedido_id, checkout_slug, utm_source } = req.body
+    const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
+    if (!stripeKey || stripeKey.includes('placeholder')) {
+        return res.status(500).json({ error: 'STRIPE_SECRET_KEY não configurada ou inválida.' })
+    }
 
-        if (!nome || !preco) {
-            return res.status(400).json({ error: 'Nome e preço são obrigatórios' })
+    const stripe = new Stripe(stripeKey, { apiVersion: '2025-01-27' as any })
+
+    const supabase = createClient(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+    )
+
+    try {
+        const { nome, preco, email, pedido_id, checkout_slug, utm_source } = req.body
+
+        if (!preco || !email) {
+            return res.status(400).json({ error: 'Dados insuficientes para criar checkout (preco/email faltando)' })
         }
 
         const appUrl = process.env.VITE_APP_URL || 'https://sharkpaycheckout.vercel.app'
 
-        // 1. Criar sessão de Checkout do Stripe
+        // 1. Registrar pedido no Supabase
+        await supabase.from('pedidos').insert({
+            id: pedido_id,
+            email,
+            nome: nome || 'Cliente',
+            valor: preco,
+            metodo: 'card',
+            status: 'pendente',
+            utm_source: utm_source || null
+        })
+
+        // 2. Criar Checkout Session
         const session = await stripe.checkout.sessions.create({
-            mode: 'payment',
             payment_method_types: ['card'],
-            customer_email: email || undefined,
             line_items: [{
                 price_data: {
                     currency: 'brl',
-                    product_data: {
-                        name: nome,
-                    },
-                    unit_amount: Math.round(Number(preco) * 100), // Centavos
+                    product_data: { name: nome },
+                    unit_amount: Math.round(preco * 100),
                 },
                 quantity: 1,
             }],
-            success_url: `${appUrl}/sucesso?session_id={CHECKOUT_SESSION_ID}&pedido=${pedido_id}`,
-            cancel_url: checkout_slug ? `${appUrl}/checkout/${checkout_slug}` : `${appUrl}`,
-            metadata: {
-                pedido_id: pedido_id || '',
-                produto_id: produto_id || '',
-                source: 'sharkpay_checkout'
-            }
+            mode: 'payment',
+            customer_email: email,
+            success_url: `${appUrl}/sucesso?session_id={CHECKOUT_SESSION_ID}&pedido_id=${pedido_id}`,
+            cancel_url: checkout_slug ? `${appUrl}/checkout/${checkout_slug}` : appUrl,
+            metadata: { pedido_id, utm_source: utm_source || '' }
         })
 
-        // 2. Registrar pedido no Supabase
-        if (pedido_id) {
-            await supabase
-                .from('pedidos')
-                .upsert({
-                    id: pedido_id,
-                    email: email || '',
-                    nome: email || '', // Will be updated by webhook
-                    valor: Number(preco),
-                    metodo: 'cartao',
-                    status: 'pendente',
-                    stripe_session_id: session.id,
-                    utm_source: utm_source || null,
-                    criado_em: new Date().toISOString()
-                })
-        }
-
-        return res.status(200).json({
-            checkout_url: session.url,
-            session_id: session.id
-        })
-    } catch (error: any) {
-        console.error('[Stripe Checkout] Erro:', error)
-        return res.status(500).json({ error: error.message })
+        return res.status(200).json({ checkout_url: session.url, session_id: session.id })
+    } catch (err) {
+        const error = err as Error;
+        console.error('Erro Stripe:', error)
+        return res.status(500).json({ error: error.message || 'Erro interno no servidor de pagamentos' })
     }
 }
