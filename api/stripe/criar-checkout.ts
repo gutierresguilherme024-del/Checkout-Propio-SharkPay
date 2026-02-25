@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
     try {
-        const { produto_id, nome, preco, email, pedido_id, checkout_slug } = req.body
+        const { produto_id, nome, preco, email, pedido_id, checkout_slug, utm_source } = req.body
 
         if (!nome || !preco) {
             return res.status(400).json({ error: 'Nome e preço são obrigatórios' })
@@ -58,6 +58,7 @@ export default async function handler(req: any, res: any) {
                     metodo: 'cartao',
                     status: 'pendente',
                     stripe_session_id: session.id,
+                    utm_source: utm_source || null,
                     criado_em: new Date().toISOString()
                 })
         }

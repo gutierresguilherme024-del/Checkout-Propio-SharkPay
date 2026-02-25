@@ -13,7 +13,7 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ erro: { message: 'PushinPay não configurado. Adicione PUSHINPAY_TOKEN nas variáveis de ambiente da Vercel.' } })
     }
 
-    const { valor, email, nome, pedido_id } = req.body
+    const { valor, email, nome, pedido_id, utm_source } = req.body
 
     if (!valor || valor <= 0) {
         return res.status(400).json({ erro: { message: 'Valor inválido' } })
@@ -30,6 +30,7 @@ export default async function handler(req: any, res: any) {
                 valor,
                 metodo: 'pix',
                 status: 'pendente',
+                utm_source: utm_source || null,
                 criado_em: new Date().toISOString()
             })
 

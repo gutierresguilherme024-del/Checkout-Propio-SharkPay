@@ -1,172 +1,296 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase/client";
+import { Loader2, RefreshCcw, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
-type OrderStatus = "pending" | "paid" | "failed";
+type OrderStatus = "pendente" | "pago" | "falhou";
 
 type Order = {
+  id: string;
   email: string;
-  method: "Pix" | "Cartão";
-  value: number;
+  nome: string;
+  metodo: "pix" | "cartao";
+  valor: number;
   status: OrderStatus;
-  utmSource: string;
-  date: string;
+  criado_em: string;
+  pago_em?: string;
+  utm_source?: string;
 };
 
 function money(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 }
 
-const mockOrders: Order[] = [
-  { email: "maria@exemplo.com", method: "Pix", value: 97, status: "paid", utmSource: "ig", date: "2026-02-24 10:12" },
-  { email: "joao@exemplo.com", method: "Cartão", value: 97, status: "paid", utmSource: "yt", date: "2026-02-24 09:46" },
-  { email: "ana@exemplo.com", method: "Pix", value: 97, status: "pending", utmSource: "tt", date: "2026-02-24 09:12" },
-  { email: "bruno@exemplo.com", method: "Cartão", value: 97, status: "failed", utmSource: "direct", date: "2026-02-23 18:05" },
-];
-
 export default function AdminOverview() {
-  const [methodFilter, setMethodFilter] = useState<"all" | "Pix" | "Cartão">("all");
+  const [methodFilter, setMethodFilter] = useState<"all" | "pix" | "cartao">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [realOrders, setRealOrders] = useState<Order[]>([]);
 
-  const orders = useMemo(() => {
-    return mockOrders.filter((o) => {
-      if (methodFilter !== "all" && o.method !== methodFilter) return false;
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('pedidos')
+        .select('*')
+        .order('criado_em', { ascending: false });
+
+      if (error) throw error;
+      setRealOrders(data || []);
+    } catch (err: any) {
+      console.error("Erro ao buscar pedidos:", err);
+      toast.error("Falha ao carregar dados reais do Supabase");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+
+    // Inscrição em tempo real para novos pedidos
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const filteredOrders = useMemo(() => {
+    return realOrders.filter((o) => {
+      if (methodFilter !== "all" && o.metodo !== methodFilter) return false;
       if (statusFilter !== "all" && o.status !== statusFilter) return false;
-      if (query && !o.email.toLowerCase().includes(query.toLowerCase())) return false;
+      if (query && !o.email.toLowerCase().includes(query.toLowerCase()) && !o.nome.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [methodFilter, statusFilter, query]);
+  }, [realOrders, methodFilter, statusFilter, query]);
 
-  const receitaHoje = 194;
-  const receitaMes = 2891;
-  const totalVendas = 38;
-  const ticketMedio = receitaMes / totalVendas;
+  // Cálculos de Métricas Reais
+  const stats = useMemo(() => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
-  const salesByDay = useMemo(
-    () =>
-      Array.from({ length: 30 }).map((_, i) => ({
-        day: i + 1,
-        value: Math.max(0, Math.round(40 + 30 * Math.sin(i / 4) + (i % 3) * 8)),
-      })),
-    [],
-  );
+    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+
+    const pagos = realOrders.filter(o => o.status === 'pago');
+    const receitaTotal = pagos.reduce((acc, o) => acc + Number(o.valor), 0);
+
+    const receitaHoje = pagos
+      .filter(o => o.pago_em && new Date(o.pago_em) >= hoje)
+      .reduce((acc, o) => acc + Number(o.valor), 0);
+
+    const receitaMes = pagos
+      .filter(o => o.pago_em && new Date(o.pago_em) >= inicioMes)
+      .reduce((acc, o) => acc + Number(o.valor), 0);
+
+    const pixCount = pagos.filter(o => o.metodo === 'pix').length;
+    const cartaoCount = pagos.filter(o => o.metodo === 'cartao').length;
+
+    return {
+      receitaHoje,
+      receitaMes,
+      totalVendas: pagos.length,
+      ticketMedio: pagos.length > 0 ? receitaTotal / pagos.length : 0,
+      pixCount,
+      cartaoCount,
+      receitaTotal
+    };
+  }, [realOrders]);
+
+  // Vendas por dia nos últimos 30 dias
+  const salesByDay = useMemo(() => {
+    const days = Array.from({ length: 30 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      d.setHours(0, 0, 0, 0);
+      return {
+        date: d,
+        display: d.getDate(),
+        value: 0
+      };
+    });
+
+    realOrders.filter(o => o.status === 'pago' && o.pago_em).forEach(o => {
+      const orderDate = new Date(o.pago_em!);
+      orderDate.setHours(0, 0, 0, 0);
+      const dayIndex = days.findIndex(d => d.date.getTime() === orderDate.getTime());
+      if (dayIndex !== -1) {
+        days[dayIndex].value += Number(o.valor);
+      }
+    });
+
+    const maxValue = Math.max(...days.map(d => d.value), 1);
+    return days.map(d => ({
+      ...d,
+      percent: (d.value / maxValue) * 100
+    }));
+  }, [realOrders]);
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl">Visão Geral</h1>
-          <p className="text-sm text-muted-foreground">Desempenho de vendas (mock)</p>
+        <div className="flex items-center gap-4">
+          <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-3 rounded-2xl border border-primary/10">
+            <TrendingUp className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl">Dashboard de Vendas</h1>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              Monitorando dados reais do Supabase em tempo real
+            </p>
+          </div>
         </div>
-        <Badge variant="secondary">MVP</Badge>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchOrders} disabled={loading} className="gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+            Sincronizar
+          </Button>
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">PRODUÇÃO</Badge>
+        </div>
       </header>
 
       <section className="grid gap-3 md:grid-cols-4">
-        <MetricCard title="Receita Hoje" value={money(receitaHoje)} hint="Últimas 24h" />
-        <MetricCard title="Receita do Mês" value={money(receitaMes)} hint="Mês atual" />
-        <MetricCard title="Total de Vendas" value={String(totalVendas)} hint="Pagas + pendentes" />
-        <MetricCard title="Ticket Médio" value={money(ticketMedio)} hint="Receita / vendas" />
+        <MetricCard title="Receita Hoje" value={money(stats.receitaHoje)} hint="Últimas 24h" />
+        <MetricCard title="Receita do Mês" value={money(stats.receitaMes)} hint="Mês atual" />
+        <MetricCard title="Vendas Pagas" value={String(stats.totalVendas)} hint="Transações aprovadas" />
+        <MetricCard title="Ticket Médio" value={money(stats.ticketMedio)} hint="Receita / vendas" />
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <Card className="p-4">
-          <p className="text-sm font-medium">Métricas por método</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <MiniStat title="Pix" value="22" />
-            <MiniStat title="Cartão" value="16" />
+        <Card className="p-4 border-white/5 bg-slate-900/50 backdrop-blur-xl">
+          <p className="text-sm font-medium mb-4">Métricas por método (Vendas Pagas)</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MiniStat title="Pix" value={String(stats.pixCount)} color="text-emerald-400" />
+            <MiniStat title="Cartão" value={String(stats.cartaoCount)} color="text-cyan-400" />
           </div>
         </Card>
-        <Card className="p-4">
-          <p className="text-sm font-medium">Vendas por dia (30 dias)</p>
-          <div className="mt-4 grid grid-cols-30 items-end gap-1">
-            {salesByDay.map((d) => (
+        <Card className="p-4 border-white/5 bg-slate-900/50 backdrop-blur-xl">
+          <p className="text-sm font-medium mb-4">Volume Financeiro (Últimos 30 dias)</p>
+          <div className="h-[80px] flex items-end gap-1 px-1">
+            {salesByDay.map((d, i) => (
               <div
-                key={d.day}
-                className="rounded-sm bg-[image:var(--gradient-hero)] opacity-80"
-                style={{ height: `${d.value}%` }}
-                title={`Dia ${d.day}: ${d.value}`}
+                key={i}
+                className="flex-1 rounded-t-sm bg-gradient-to-t from-primary/40 to-primary transition-all duration-500"
+                style={{ height: `${Math.max(d.percent, 5)}%` }}
+                title={`Dia ${d.display}: ${money(d.value)}`}
               />
             ))}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Visual simples (sem Recharts) para manter leve.</p>
+          <div className="flex justify-between mt-2 px-1">
+            <span className="text-[10px] text-muted-foreground">30 dias atrás</span>
+            <span className="text-[10px] text-muted-foreground">Hoje</span>
+          </div>
         </Card>
       </section>
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">Tabela de Vendas</h2>
-            <p className="text-xs text-muted-foreground">Filtros por método, status e e-mail (mock)</p>
+            <h2 className="text-base font-semibold">Tabela de Pedidos</h2>
+            <p className="text-xs text-muted-foreground">Listagem completa em tempo real</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filtrar por e-mail" className="w-56" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="E-mail ou Nome"
+              className="w-56 bg-slate-900/50 border-white/10"
+            />
             <Select value={methodFilter} onValueChange={(v) => setMethodFilter(v as any)}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-32 bg-slate-900/50 border-white/10">
                 <SelectValue placeholder="Método" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="Pix">Pix</SelectItem>
-                <SelectItem value="Cartão">Cartão</SelectItem>
+                <SelectItem value="pix">Pix</SelectItem>
+                <SelectItem value="cartao">Cartão</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-32 bg-slate-900/50 border-white/10">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="paid">Pago</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-                <SelectItem value="failed">Falhou</SelectItem>
+                <SelectItem value="pago">Pago</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="falhou">Falhou</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList>
-            <TabsTrigger value="orders">Vendas</TabsTrigger>
-            <TabsTrigger value="notes">Notas</TabsTrigger>
+          <TabsList className="bg-slate-900/50 border-white/10">
+            <TabsTrigger value="orders">Transações</TabsTrigger>
+            <TabsTrigger value="logs">Logs do Sistema</TabsTrigger>
           </TabsList>
           <TabsContent value="orders" className="mt-3">
-            <Card className="overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Método</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>UTM Source</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((o) => (
-                    <TableRow key={o.email + o.date}>
-                      <TableCell className="font-medium">{o.email}</TableCell>
-                      <TableCell>{o.method}</TableCell>
-                      <TableCell>{money(o.value)}</TableCell>
-                      <TableCell>
-                        <StatusPill status={o.status} />
-                      </TableCell>
-                      <TableCell>{o.utmSource}</TableCell>
-                      <TableCell className="text-muted-foreground">{o.date}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <Card className="overflow-hidden border-white/5 bg-slate-900/50">
+              {loading && realOrders.length === 0 ? (
+                <div className="p-20 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">Conectando ao Supabase...</p>
+                </div>
+              ) : filteredOrders.length === 0 ? (
+                <div className="p-20 text-center text-muted-foreground">
+                  Nenhum pedido encontrado.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-white/5">
+                      <TableRow>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Método</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredOrders.map((o) => (
+                        <TableRow key={o.id} className="border-white/5 hover:bg-white/5">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-slate-200">{o.nome || 'Cliente'}</span>
+                              <span className="text-xs text-muted-foreground">{o.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="capitalize">{o.metodo}</TableCell>
+                          <TableCell className="font-medium">{money(o.valor)}</TableCell>
+                          <TableCell>
+                            <StatusPill status={o.status} />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {new Date(o.criado_em).toLocaleString('pt-BR')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </Card>
           </TabsContent>
-          <TabsContent value="notes" className="mt-3">
-            <Card className="p-4 text-sm text-muted-foreground">
-              Quando o backend entrar (fases 2–3), esta tela passa a consumir orders reais e atualiza em tempo real.
+          <TabsContent value="logs" className="mt-3">
+            <Card className="p-8 text-center text-sm text-muted-foreground border-white/5 bg-slate-900/50">
+              Os webhooks e logs de auditoria serão exibidos aqui em breve.
+              O sistema já está registrando transações em tempo real.
             </Card>
           </TabsContent>
         </Tabs>
@@ -177,33 +301,37 @@ export default function AdminOverview() {
 
 function MetricCard({ title, value, hint }: { title: string; value: string; hint: string }) {
   return (
-    <Card className="relative overflow-hidden p-4">
-      <div className="absolute -right-10 -top-10 size-28 rounded-full bg-[image:var(--gradient-hero)] opacity-15 blur-2xl" />
+    <Card className="relative overflow-hidden p-4 border-white/5 bg-slate-900/50 backdrop-blur-xl">
+      <div className="absolute -right-10 -top-10 size-28 rounded-full bg-primary/10 blur-2xl" />
       <div className="relative">
         <p className="text-xs text-muted-foreground">{title}</p>
-        <p className="mt-2 font-display text-2xl">{value}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+        <p className="mt-2 font-display text-2xl text-white">{value}</p>
+        <p className="mt-1 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{hint}</p>
       </div>
     </Card>
   );
 }
 
-function MiniStat({ title, value }: { title: string; value: string }) {
+function MiniStat({ title, value, color }: { title: string; value: string, color: string }) {
   return (
-    <div className="rounded-xl border bg-background/60 p-3">
+    <div className="rounded-xl border border-white/5 bg-slate-950/50 p-3">
       <p className="text-xs text-muted-foreground">Total via {title}</p>
-      <p className="mt-1 font-display text-xl">{value}</p>
+      <p className={`mt-1 font-display text-xl ${color}`}>{value}</p>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: OrderStatus }) {
   const map: Record<OrderStatus, { label: string; cls: string }> = {
-    paid: { label: "paid", cls: "bg-[image:var(--gradient-hero)] text-primary-foreground" },
-    pending: { label: "pending", cls: "bg-secondary text-secondary-foreground" },
-    failed: { label: "failed", cls: "bg-destructive text-destructive-foreground" },
+    pago: { label: "Aprovado", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+    pendente: { label: "Pendente", cls: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
+    falhou: { label: "Falhou", cls: "bg-rose-500/20 text-rose-400 border-rose-500/30" },
   };
 
-  const v = map[status];
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${v.cls}`}>{v.label}</span>;
+  const v = map[status] || { label: status, cls: "bg-slate-500/20 text-slate-400" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold border uppercase tracking-wider ${v.cls}`}>
+      {v.label}
+    </span>
+  );
 }

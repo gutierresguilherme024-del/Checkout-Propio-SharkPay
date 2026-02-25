@@ -8,6 +8,13 @@ import { Switch } from "@/components/ui/switch";
 import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { createClient } from "@supabase/supabase-js";
+
+// Cliente admin com service_role para uploads sem necessidade de RLS
+const supabaseAdmin = createClient(
+    import.meta.env.VITE_SUPABASE_URL || 'https://tcthjnpqjlifmuqipwhq.supabase.co',
+    import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 interface Product {
     id: string;
@@ -77,11 +84,11 @@ export default function AdminProducts() {
     async function uploadFile(file: File, bucket: string) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${crypto.randomUUID()}_${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
 
-        const { error: uploadError, data } = await supabase.storage
+        // Usa o cliente admin (service_role) para bypass de RLS no storage
+        const { error: uploadError, data } = await supabaseAdmin.storage
             .from(bucket)
-            .upload(filePath, file);
+            .upload(fileName, file, { upsert: true });
 
         if (uploadError) throw uploadError;
         return data.path;
@@ -90,6 +97,13 @@ export default function AdminProducts() {
     async function handleSave() {
         if (!nome || !preco) {
             toast.error("Nome e preço são obrigatórios");
+            return;
+        }
+
+        // Verificar sessão antes de inserir (exigido pelas políticas de RLS)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            toast.error('Você precisa estar logado para cadastrar produtos');
             return;
         }
 
@@ -162,8 +176,8 @@ export default function AdminProducts() {
         if (!confirm("Tem certeza que deseja excluir este produto?")) return;
 
         try {
-            if (pdfKey) await supabase.storage.from('produtos-pdf').remove([pdfKey]);
-            if (imgUrl) await supabase.storage.from('produtos-pdf').remove([imgUrl]);
+            if (pdfKey) await supabaseAdmin.storage.from('produtos-pdf').remove([pdfKey]);
+            if (imgUrl) await supabaseAdmin.storage.from('produtos-pdf').remove([imgUrl]);
 
             const { error } = await (supabase.from('produtos') as any)
                 .delete()

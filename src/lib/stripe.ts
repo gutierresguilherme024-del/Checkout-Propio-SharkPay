@@ -8,6 +8,7 @@ export async function criarCheckoutStripe(dados: {
     email: string
     pedido_id: string
     checkout_slug?: string
+    utm_source?: string
 }): Promise<{ checkout_url: string; session_id: string }> {
     const response = await fetch('/api/stripe/criar-checkout', {
         method: 'POST',

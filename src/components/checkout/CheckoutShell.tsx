@@ -355,11 +355,13 @@ export function CheckoutShell({
     if (method === "pix") {
       try {
         setIsGeneratingPix(true);
+        const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
         const data = await criarPix({
           valor: amount,
           email,
           nome: name,
-          pedido_id: `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+          pedido_id: `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+          utm_source: utms.utm_source
         });
         setLocalPixData(data);
         setPixOpen(true);
@@ -374,13 +376,15 @@ export function CheckoutShell({
       // Pagamento REAL com Stripe Checkout
       try {
         setIsGeneratingPix(true);
+        const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
         const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
         const { checkout_url } = await criarCheckoutStripe({
           nome: displayProduct.name,
           preco: amount,
           email,
           pedido_id: pedidoId,
-          checkout_slug: window.location.pathname.split('/checkout/')[1] || ''
+          checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
+          utm_source: utms.utm_source
         });
         // Redirecionar para o Stripe Checkout
         if (checkout_url) {

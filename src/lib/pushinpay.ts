@@ -1,8 +1,12 @@
+/**
+ * Faz chamada à API serverless para gerar um PIX no PushinPay
+ */
 export async function criarPix(dados: {
     valor: number
     email: string
     nome: string
     pedido_id: string
+    utm_source?: string
 }) {
     const response = await fetch('/api/pushinpay/criar-pix', {
         method: 'POST',
@@ -10,10 +14,11 @@ export async function criarPix(dados: {
         body: JSON.stringify(dados)
     })
 
+    const data = await response.json()
+
     if (!response.ok) {
-        const erro = await response.json()
-        throw new Error(erro.erro?.message || 'Erro ao gerar PIX')
+        throw new Error(data.erro?.message || 'Erro ao gerar PIX')
     }
 
-    return response.json()
+    return data
 }
