@@ -661,12 +661,16 @@ export function CheckoutShell({
               {isMundPayActive && (
                 <div className="sco-field animate-in fade-in slide-in-from-top-2 duration-300">
                   <label className="sco-lbl" htmlFor="sco-phone">Número de Celular</label>
-                  <div className="flex gap-2">
-                    <div className="sco-inp flex items-center gap-1.5 px-3 w-[90px] shrink-0 text-sm text-muted-foreground">
+                  <div className={cn(
+                    "sco-inp flex items-center p-0 overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20 transition-all",
+                    errors.phone && "sco-inp--err"
+                  )}>
+                    <div className="bg-muted/20 border-r border-border/60 h-full flex items-center px-3 gap-1.5 text-[11px] font-bold text-muted-foreground whitespace-nowrap">
                       <span>🇧🇷</span>
                       <span>+55</span>
                     </div>
-                    <input id="sco-phone" className={cn("sco-inp flex-1", errors.phone && "sco-inp--err")}
+                    <input id="sco-phone"
+                      className="flex-1 bg-transparent border-none outline-none px-3 h-full text-sm placeholder:text-muted-foreground/40"
                       placeholder="(11) 99999-9999"
                       value={phone}
                       onChange={e => {
