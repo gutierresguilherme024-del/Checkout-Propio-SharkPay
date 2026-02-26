@@ -363,44 +363,54 @@ export function CheckoutShell({
     // Se o produto diz explicitamente que Stripe está desabilitado, respeitar
     if (product && product.stripe_enabled === false) return false;
 
-    // Se o produto diz explicitamente que Stripe está habilitado,
-    // considerar ativo MESMO durante loading (não depende do banco)
+    // Se o produto diz explicitamente que Stripe está habilitado, ou se a coluna não existe (undefined), 
+    // dependemos do status global da integração
     if (product?.stripe_enabled === true) return true;
 
-    // Caso contrário (stripe_enabled é undefined/null), depende do status global
-    if (loading) return false; // ainda carregando, não sabemos
-    return getStatus(payments, 'stripe') === 'active';
-  }, [payments, getStatus, product?.stripe_enabled, product, loading]);
+    // Se a integração global estiver ativa (getStatus já tem o failsafe para ENV agora), mostramos
+    const status = getStatus(payments, 'stripe');
+    if (status === 'active') return true;
+
+    // Enquanto carrega, se não temos sinal negativo do produto, assumimos true se o ENV tiver a chave
+    if (loading && product?.stripe_enabled !== false) {
+      const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+      return !!envKey && !envKey.includes('placeholder');
+    }
+
+    return false;
+  }, [payments, getStatus, product, loading]);
 
   const isPushinPayActive = useMemo(() => {
     if (product && product.pushinpay_enabled === false) return false;
-    if (product?.pushinpay_enabled === true) {
-      if (loading) return true;
-      const status = getStatus(payments, 'pushinpay');
-      return status !== 'inactive';
-    }
-    if (loading) return false;
+
+    // Prioridade 1: Ativação explícita no produto
+    if (product?.pushinpay_enabled === true) return true;
+
+    // Prioridade 2: Status global (integrations ou ENV)
     const status = getStatus(payments, 'pushinpay');
-    if (status === 'inactive') return false;
     if (status === 'active') return true;
-    const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
-    return !!token && token.length > 20 && !token.includes('placeholder');
-  }, [payments, getStatus, product?.pushinpay_enabled, loading]);
+
+    // Enquanto carrega
+    if (loading && product?.pushinpay_enabled !== false) {
+      const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
+      return !!envKey && envKey.length > 20 && !envKey.includes('placeholder');
+    }
+
+    return false;
+  }, [payments, getStatus, product, loading]);
 
   const isMundPayActive = useMemo(() => {
     // Se o produto tem uma URL MundPay, forçamos como ativo SEMPRE (prioridade máxima)
     if (product?.mundpay_url) return true;
 
-    // Só checa mundpay_enabled se não tiver URL (campo genérico de controle)
+    // Caso contrário, respeita o mundpay_enabled se existir e for false
     if (product && product.mundpay_enabled === false) return false;
 
-    if (loading) return false;
-    const status = getStatus(payments, 'mundpay');
-    if (status === 'inactive') return false;
-    if (status === 'active') return true;
-    const token = import.meta.env.VITE_MUNDPAY_API_TOKEN;
-    return !!token && token.length > 10 && !token.includes('placeholder');
-  }, [payments, getStatus, product?.mundpay_url, product?.mundpay_enabled, loading]);
+    // MundPay não tem chave de API no ENV (funciona por redirect), então se o produto ou global habilita, está ativo.
+    if (product?.mundpay_enabled === true) return true;
+
+    return getStatus(payments, 'mundpay') === 'active';
+  }, [payments, getStatus, product, loading]);
 
   // ── STRIPE: Carregar chave pública (PK) ──
   // Roda assim que isStripeActive for true, sem esperar loading completo

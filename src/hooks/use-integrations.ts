@@ -22,7 +22,23 @@ export function useIntegrations() {
 
     const getStatus = (list: IntegrationSettings[], id: string) => {
         const item = list.find(i => i.id === id);
-        if (!item?.enabled) return "inactive";
+
+        // Failsafe: se não encontrou no banco (tabela faltando ou vazia), 
+        // checa se tem a chave configurada no ENV (Vercel)
+        if (!item) {
+            if (id === 'stripe') {
+                const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+                return (envKey && !envKey.includes('placeholder')) ? "active" : "inactive";
+            }
+            if (id === 'pushinpay') {
+                const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
+                return (envKey && envKey.length > 20 && !envKey.includes('placeholder')) ? "active" : "inactive";
+            }
+            if (id === 'mundpay') return "active"; // MundPay sempre ativo se não explicitamente desativado
+            return "inactive";
+        }
+
+        if (!item.enabled) return "inactive";
 
         // Regras de validação baseadas em regras-limitadas/limitaçoes.md
         if (id === 'utmify') return item.config.apiKey ? "active" : "pending";
@@ -38,11 +54,7 @@ export function useIntegrations() {
                 !!k && k.length > 10 && !k.includes('placeholder') && !k.includes('pp_live_placeholder');
             return (isRealToken(envKey) || isRealToken(configKey)) ? "active" : "pending";
         }
-        if (id === 'mundpay') {
-            // MundPay funciona por URL de redirect configurada no produto,
-            // não precisa de token de API. Se está habilitado, está ativo.
-            return "active";
-        }
+        if (id === 'mundpay') return "active";
 
         return "active";
     };
