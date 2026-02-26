@@ -253,7 +253,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const checkoutUrl = new URL(mundpay_url)
             if (nome) checkoutUrl.searchParams.set('name', nome)
             if (email) checkoutUrl.searchParams.set('email', email)
-            if (cpf) checkoutUrl.searchParams.set('cpf', cpf.replace(/\D/g, ''))
+            if (cpf) {
+                const cpfLimpo = cpf.replace(/\D/g, '')
+                checkoutUrl.searchParams.set('document', cpfLimpo)
+                checkoutUrl.searchParams.set('cpf', cpfLimpo) // mantemos por garantia
+            }
             if (phone) {
                 const phoneDigits = phone.replace(/\D/g, '')
                 checkoutUrl.searchParams.set('phone', phoneDigits)

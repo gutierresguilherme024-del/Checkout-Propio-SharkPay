@@ -746,17 +746,23 @@ export function CheckoutShell({
                 <div className="sco-pix-info">
                   <div className="sco-pix-ic"><Ico.Pix /></div>
                   <div>
-                    <p className="sco-pix-ttl">Pagamento via Pix</p>
-                    <p className="sco-pix-desc">O QR Code será gerado após clicar no botão abaixo.</p>
+                    <p className="sco-pix-ttl">
+                      {isMundPayActive ? "Pagamento via Pix" : "Pagamento via Pix"}
+                    </p>
+                    <p className="sco-pix-desc">
+                      {isMundPayActive
+                        ? "Você será direcionado para um ambiente 100% seguro para finalizar o seu pagamento em poucos segundos."
+                        : "O QR Code será gerado após clicar no botão abaixo."}
+                    </p>
                   </div>
                 </div>
               ) : null}
             </div>
 
             {method === "pix" && (
-              <button className="sco-cta mt-4" onClick={onPay} disabled={isGeneratingPix}>
-                {isGeneratingPix ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ico.Lock />}
-                {isMundPayActive ? "Continuar para o Pagamento" : `Gerar QR Code Pix · ${fmtBRL(amount)}`}
+              <button className={cn("sco-cta mt-4", isMundPayActive && "bg-emerald-600 hover:bg-emerald-700")} onClick={onPay} disabled={isGeneratingPix}>
+                {isGeneratingPix ? <Loader2 className="w-4 h-4 animate-spin" /> : (!isMundPayActive && <Ico.Lock />)}
+                {isMundPayActive ? "🔒 Continuar para Pagamento Seguro" : `Gerar QR Code Pix · ${fmtBRL(amount)}`}
               </button>
             )}
 
