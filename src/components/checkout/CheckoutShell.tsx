@@ -336,6 +336,9 @@ export type CheckoutShellProps = {
     image_url?: string | null;
     delivery_content: string;
     mundpay_url?: string | null;
+    stripe_enabled?: boolean | null;
+    pushinpay_enabled?: boolean | null;
+    mundpay_enabled?: boolean | null;
   } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
@@ -353,16 +356,22 @@ export function CheckoutShell({
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
   const [stripePromise, setStripePromise] = useState<any>(null);
 
-  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments, getStatus]);
+  const isStripeActive = useMemo(() => {
+    if (product && product.stripe_enabled === false) return false;
+    return getStatus(payments, 'stripe') === 'active';
+  }, [payments, getStatus, product?.stripe_enabled]);
+
   const isPushinPayActive = useMemo(() => {
+    if (product && product.pushinpay_enabled === false) return false;
     const status = getStatus(payments, 'pushinpay');
     if (status === 'inactive') return false;
     if (status === 'active') return true;
     const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
     return !!token && token.length > 20 && !token.includes('placeholder');
-  }, [payments, getStatus]);
+  }, [payments, getStatus, product?.pushinpay_enabled]);
 
   const isMundPayActive = useMemo(() => {
+    if (product && product.mundpay_enabled === false) return false;
     // Se o produto tem uma URL MundPay, forçamos como ativo para este checkout
     if (product?.mundpay_url) return true;
 
@@ -371,7 +380,7 @@ export function CheckoutShell({
     if (status === 'active') return true;
     const token = import.meta.env.VITE_MUNDPAY_API_TOKEN;
     return !!token && token.length > 10 && !token.includes('placeholder');
-  }, [payments, getStatus, product?.mundpay_url]);
+  }, [payments, getStatus, product?.mundpay_url, product?.mundpay_enabled]);
 
   useEffect(() => {
     const pk = (import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY;

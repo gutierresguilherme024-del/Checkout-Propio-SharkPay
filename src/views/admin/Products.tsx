@@ -22,6 +22,9 @@ interface Product {
     stripe_price_id?: string;
     checkout_slug?: string | null;
     mundpay_url?: string | null;
+    stripe_enabled: boolean;
+    pushinpay_enabled: boolean;
+    mundpay_enabled: boolean;
 }
 
 const APP_URL = window.location.origin;
@@ -209,6 +212,9 @@ export default function AdminProducts() {
     const [descricao, setDescricao] = useState("");
     const [ativo, setAtivo] = useState(true);
     const [mundpayUrl, setMundpayUrl] = useState("");
+    const [stripeEnabled, setStripeEnabled] = useState(true);
+    const [pushinpayEnabled, setPushinpayEnabled] = useState(true);
+    const [mundpayEnabled, setMundpayEnabled] = useState(false);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -253,6 +259,9 @@ export default function AdminProducts() {
         setDescricao(product.descricao || "");
         setAtivo(product.ativo);
         setMundpayUrl(product.mundpay_url || "");
+        setStripeEnabled(product.stripe_enabled ?? true);
+        setPushinpayEnabled(product.pushinpay_enabled ?? true);
+        setMundpayEnabled(product.mundpay_enabled ?? !!product.mundpay_url);
     };
 
     async function handleSave() {
@@ -290,6 +299,9 @@ export default function AdminProducts() {
                     descricao,
                     ativo,
                     mundpay_url: mundpayUrl || null,
+                    stripe_enabled: stripeEnabled,
+                    pushinpay_enabled: pushinpayEnabled,
+                    mundpay_enabled: mundpayEnabled,
                 };
                 if (imagem_url) camposParaAtualizar.imagem_url = imagem_url;
                 if (pdf_storage_key) camposParaAtualizar.pdf_storage_key = pdf_storage_key;
@@ -314,6 +326,9 @@ export default function AdminProducts() {
                     stripe_product_id: stripeData?.stripe_product_id || null,
                     stripe_price_id: stripeData?.stripe_price_id || null,
                     mundpay_url: mundpayUrl || null,
+                    stripe_enabled: stripeEnabled,
+                    pushinpay_enabled: pushinpayEnabled,
+                    mundpay_enabled: mundpayEnabled,
                 });
 
                 const checkoutLink = getCheckoutUrl(produtoSalvo.checkout_slug);
@@ -342,8 +357,11 @@ export default function AdminProducts() {
         setNome("");
         setPreco("");
         setDescricao("");
-        setMundpayUrl("");
         setAtivo(true);
+        setMundpayUrl("");
+        setStripeEnabled(true);
+        setPushinpayEnabled(true);
+        setMundpayEnabled(false);
         setImageFile(null);
         setPdfFile(null);
     }
@@ -440,7 +458,7 @@ export default function AdminProducts() {
                             </Label>
 
                             <div className="grid gap-3">
-                                <div className={`p-4 rounded-lg border transition-all ${mundpayUrl ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
+                                <div className={`p-4 rounded-lg border transition-all ${mundpayEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <div className="h-8 w-8 rounded bg-black flex items-center justify-center text-[10px] text-white font-bold">MP</div>
@@ -450,12 +468,12 @@ export default function AdminProducts() {
                                             </div>
                                         </div>
                                         <Switch
-                                            checked={!!mundpayUrl}
-                                            onCheckedChange={(checked) => setMundpayUrl(checked ? "PREENCHA_O_LINK_AQUI" : "")}
+                                            checked={mundpayEnabled}
+                                            onCheckedChange={setMundpayEnabled}
                                         />
                                     </div>
 
-                                    {!!mundpayUrl && (
+                                    {mundpayEnabled && (
                                         <div className="mt-4 pt-4 border-t border-primary/10 space-y-2 animate-in fade-in slide-in-from-top-2">
                                             <div className="flex items-center gap-2">
                                                 <Link className="size-3.5 text-primary" />
@@ -463,7 +481,7 @@ export default function AdminProducts() {
                                             </div>
                                             <Input
                                                 id="mundpay"
-                                                value={mundpayUrl === "PREENCHA_O_LINK_AQUI" ? "" : mundpayUrl}
+                                                value={mundpayUrl}
                                                 onChange={e => setMundpayUrl(e.target.value)}
                                                 placeholder="https://pay.mycheckoutt.com/..."
                                                 className="bg-background h-9 text-sm"
@@ -472,7 +490,23 @@ export default function AdminProducts() {
                                     )}
                                 </div>
 
-                                <div className="p-4 rounded-lg border bg-muted/20 border-border/50 opacity-60">
+                                <div className={`p-4 rounded-lg border transition-all ${pushinpayEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-8 w-8 rounded bg-gradient-to-br from-[#5D5FEF] to-[#9B5CFA] flex items-center justify-center text-[10px] text-white font-bold">PP</div>
+                                            <div>
+                                                <p className="text-sm font-medium">PushinPay (Pix Direto)</p>
+                                                <p className="text-[11px] text-muted-foreground">Pix nativo com confirmação automática.</p>
+                                            </div>
+                                        </div>
+                                        <Switch
+                                            checked={pushinpayEnabled}
+                                            onCheckedChange={setPushinpayEnabled}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className={`p-4 rounded-lg border transition-all ${stripeEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
                                             <div className="h-8 w-8 rounded bg-[#635BFF] flex items-center justify-center text-[10px] text-white font-bold">S</div>
@@ -481,7 +515,10 @@ export default function AdminProducts() {
                                                 <p className="text-[11px] text-muted-foreground">Processamento direto no SharkPay.</p>
                                             </div>
                                         </div>
-                                        <Switch checked={true} disabled />
+                                        <Switch
+                                            checked={stripeEnabled}
+                                            onCheckedChange={setStripeEnabled}
+                                        />
                                     </div>
                                 </div>
                             </div>

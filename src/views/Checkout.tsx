@@ -18,6 +18,9 @@ interface Produto {
   checkout_slug: string;
   ativo: boolean;
   mundpay_url?: string | null;
+  stripe_enabled?: boolean;
+  pushinpay_enabled?: boolean;
+  mundpay_enabled?: boolean;
 }
 
 interface PixData {
@@ -159,7 +162,10 @@ export default function PublicCheckout() {
               price: produto.preco,
               image_url: produto.imagem_url,
               delivery_content: produto.descricao || "",
-              mundpay_url: produto.mundpay_url
+              mundpay_url: produto.mundpay_url,
+              stripe_enabled: produto.stripe_enabled,
+              pushinpay_enabled: produto.pushinpay_enabled,
+              mundpay_enabled: produto.mundpay_enabled
             }}
             onPaySuccess={(data) => {
               if (data.qr_code) setPixData(data);

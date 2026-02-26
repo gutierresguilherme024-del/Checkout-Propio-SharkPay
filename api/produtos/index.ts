@@ -50,7 +50,11 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json({ produtos: data || [] })
 
         } else if (req.method === 'POST') {
-            const { nome, preco, descricao, ativo, imagem_url, pdf_storage_key, stripe_product_id, stripe_price_id, mundpay_url } = req.body
+            const {
+                nome, preco, descricao, ativo, imagem_url, pdf_storage_key,
+                stripe_product_id, stripe_price_id, mundpay_url,
+                stripe_enabled, pushinpay_enabled, mundpay_enabled
+            } = req.body
             console.log('[API Produtos] Criando produto:', { nome, preco, mundpay_url });
 
             if (!nome || preco === undefined) {
@@ -72,6 +76,9 @@ export default async function handler(req: any, res: any) {
                     stripe_price_id: stripe_price_id || null,
                     checkout_slug,
                     mundpay_url: mundpay_url || null,
+                    stripe_enabled: stripe_enabled !== undefined ? stripe_enabled : true,
+                    pushinpay_enabled: pushinpay_enabled !== undefined ? pushinpay_enabled : true,
+                    mundpay_enabled: mundpay_enabled !== undefined ? mundpay_enabled : false,
                     atualizado_em: new Date().toISOString()
                 }])
                 .select()

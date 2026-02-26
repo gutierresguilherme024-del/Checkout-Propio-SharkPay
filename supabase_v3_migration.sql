@@ -8,8 +8,11 @@ ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cpf_comprador VARCHAR(20);
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pago_em TIMESTAMPTZ;
 ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS erro TEXT;
 
--- 2. Coluna mundpay_url na tabela produtos
+-- 2. Colunas de controle de gateway na tabela produtos
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS mundpay_url TEXT;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS stripe_enabled BOOLEAN DEFAULT true;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS pushinpay_enabled BOOLEAN DEFAULT true;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS mundpay_enabled BOOLEAN DEFAULT false;
 
 -- 3. Política de UPDATE para pedidos (webhooks precisam atualizar status)
 DO $$
