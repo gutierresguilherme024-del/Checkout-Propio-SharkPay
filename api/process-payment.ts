@@ -264,10 +264,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 checkoutUrl.searchParams.set('phone', phoneDigits)
                 checkoutUrl.searchParams.set('phone_number', phoneDigits)
             }
-            // Força a seleção do PIX no checkout da MundPay
-            checkoutUrl.searchParams.set('payment_method', 'pix')
-            // Pré-seleciona Brasil
+            // Parâmetros de Localização e Moeda (Forçar BRL e PT-BR)
+            checkoutUrl.searchParams.set('locale', 'pt_BR')
+            checkoutUrl.searchParams.set('lang', 'pt_BR')
+            checkoutUrl.searchParams.set('currency', 'BRL')
             checkoutUrl.searchParams.set('country', 'BR')
+
+            // Força a seleção do PIX no checkout da MundPay (Parâmetros redundantes)
+            checkoutUrl.searchParams.set('payment_method', 'pix')
+            checkoutUrl.searchParams.set('method', 'pix')
+            checkoutUrl.searchParams.set('pay_method', 'pix')
 
             console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
 

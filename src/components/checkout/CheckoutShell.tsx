@@ -516,8 +516,13 @@ export function CheckoutShell({
   const hue = settings.primaryHue;
 
   const onPay = async () => {
-    if (!name.trim() || !email.trim() || !email.includes("@")) {
-      setErrors({ name: !name.trim() ? "Obrigatório" : "", email: !email.trim() || !email.includes("@") ? "E-mail inválido" : "" });
+    if (!name.trim() || !email.trim() || !email.includes("@") || (isMundPayActive && (!cpf.trim() || !phone.trim()))) {
+      setErrors({
+        name: !name.trim() ? "Obrigatório" : "",
+        email: !email.trim() || !email.includes("@") ? "E-mail inválido" : "",
+        cpf: isMundPayActive && !cpf.trim() ? "Obrigatório" : "",
+        phone: isMundPayActive && !phone.trim() ? "Obrigatório" : ""
+      });
       return;
     }
 
