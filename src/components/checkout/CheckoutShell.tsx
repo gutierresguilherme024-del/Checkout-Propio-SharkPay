@@ -625,10 +625,6 @@ export function CheckoutShell({
 
         <div className="sco-cols">
           <aside className="sco-left">
-            <div className="sco-logo-wrap">
-              <div className="sco-logo">SP</div>
-              <span className="sco-logo-name">SharkPay</span>
-            </div>
 
             <div className="sco-sum-product">
               <div className="sco-sum-img-wrap">
@@ -686,6 +682,8 @@ export function CheckoutShell({
                       <span>+55</span>
                     </div>
                     <input id="sco-phone"
+                      type="tel"
+                      inputMode="numeric"
                       className="flex-1 bg-transparent border-none outline-none px-3 h-full text-sm placeholder:text-muted-foreground/40"
                       placeholder="(11) 99999-9999"
                       value={phone}
@@ -705,6 +703,7 @@ export function CheckoutShell({
                   <label className="sco-lbl" htmlFor="sco-cpf">CPF</label>
                   <input id="sco-cpf" className={cn("sco-inp", errors.cpf && "sco-inp--err")}
                     placeholder="000.000.000-00"
+                    inputMode="numeric"
                     value={cpf}
                     onChange={e => {
                       let v = e.target.value.replace(/\D/g, '').slice(0, 11);

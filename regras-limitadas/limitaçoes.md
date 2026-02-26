@@ -29,3 +29,5 @@ Este documento define as regras de negócio para a exibição e funcionamento da
 - **Carrosséis na Home**: Está terminantemente PROIBIDO o uso de carrosséis de imagens ou integrações com navegação por setas e pontos (estilo `IntegrationCarousel` ou `HeroCarousel`) na página inicial. O design deve ser estático e direto.
 - **Seletor de Temas**: O seletor de tema (Claro/Escuro) deve estar SEMPRE visível no rodapé da barra lateral administrativa para garantir acessibilidade e consistência visual.
 
+- **Logos**: Está PROIBIDO exibir a logo SharkPay (ícone + texto) acima ou sobre a imagem do produto no Checkout. A imagem do produto deve ser o elemento visual de maior destaque no topo do resumo de compra para maximizar a conversão.
+- **Otimização Mobile**: Em dispositivos móveis, a imagem do produto deve aparecer imediatamente no topo, garantindo que o lead identifique o produto sem distrações de Branding da plataforma.
