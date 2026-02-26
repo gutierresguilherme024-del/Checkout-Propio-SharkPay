@@ -265,6 +265,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
             // Força a seleção do PIX no checkout da MundPay
             checkoutUrl.searchParams.set('payment_method', 'pix')
+            // Pré-seleciona Brasil
+            checkoutUrl.searchParams.set('country', 'BR')
 
             console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
 

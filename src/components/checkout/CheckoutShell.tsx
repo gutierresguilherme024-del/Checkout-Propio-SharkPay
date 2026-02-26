@@ -490,13 +490,17 @@ export function CheckoutShell({
     const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
     const recaptcha_token = await getRecaptchaToken();
 
-    try {
-      // Determinar o gateway de Pix:
-      // Se o produto tem mundpay_url, usar mundpay diretamente
-      // Senão, usar pushinpay se ativo
-      const hasMundPayUrl = !!displayProduct.mundpay_url;
-      const pixGateway = hasMundPayUrl ? 'mundpay' : isPushinPayActive ? 'pushinpay' : isMundPayActive ? 'mundpay' : null;
+    // IMPORTANTE: Abrir a janela popup ANTES de qualquer await/async
+    // Navegadores mobile bloqueiam window.open fora do contexto síncrono do clique
+    const hasMundPayUrl = !!displayProduct.mundpay_url;
+    const pixGateway = hasMundPayUrl ? 'mundpay' : isPushinPayActive ? 'pushinpay' : isMundPayActive ? 'mundpay' : null;
+    const willUseMundPay = method === 'pix' && (pixGateway === 'mundpay');
+    let mundpayPopup: Window | null = null;
+    if (willUseMundPay) {
+      mundpayPopup = window.open('about:blank', 'mundpay_checkout', 'width=500,height=700,scrollbars=yes');
+    }
 
+    try {
       const data = await processarPagamento({
         method, nome: name, email, valor: amount,
         produto_nome: displayProduct.name,
@@ -516,17 +520,25 @@ export function CheckoutShell({
           setMundpayPedidoId(data.pedido_id);
           setMundpayPending(true);
           setMundpayPago(false);
-          // Abrir num popup
-          window.open(data.checkout_url, 'mundpay_checkout', 'width=500,height=700,scrollbars=yes');
+          // Redirecionar o popup já aberto para a URL da MundPay
+          if (mundpayPopup && !mundpayPopup.closed) {
+            mundpayPopup.location.href = data.checkout_url;
+          } else {
+            // Fallback: se o popup foi bloqueado, redirecionar na mesma aba
+            window.open(data.checkout_url, '_blank');
+          }
           onPaySuccess?.(data);
         } else {
-          // PushinPay retorna QR code
+          // PushinPay retorna QR code — fechar popup vazio se existir
+          if (mundpayPopup && !mundpayPopup.closed) mundpayPopup.close();
           setLocalPixData({ qr_code: data.qr_code, qr_code_text: data.qr_code_text, expires_at: data.expires_at });
           setPixOpen(true);
           onPaySuccess?.(data);
         }
       }
     } catch (err: any) {
+      // Fechar popup vazio em caso de erro
+      if (mundpayPopup && !mundpayPopup.closed) mundpayPopup.close();
       toast.error(err.message || 'Erro ao processar pagamento');
     } finally {
       setIsGeneratingPix(false);
@@ -689,7 +701,7 @@ export function CheckoutShell({
 
               {isMundPayActive && (
                 <div className="sco-field animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="sco-lbl" htmlFor="sco-cpf">CPF <span className="text-muted-foreground">(opcional)</span></label>
+                  <label className="sco-lbl" htmlFor="sco-cpf">CPF</label>
                   <input id="sco-cpf" className={cn("sco-inp", errors.cpf && "sco-inp--err")}
                     placeholder="000.000.000-00"
                     value={cpf}
