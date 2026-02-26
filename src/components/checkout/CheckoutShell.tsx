@@ -537,27 +537,29 @@ export function CheckoutShell({
       <div className="sco-root" style={{ "--sco-h": hue } as React.CSSProperties}>
         <div className="sco-cols">
           <div className="sco-form mx-auto max-w-md w-full">
-            <div className="flex flex-col items-center justify-center p-8 gap-6 text-center">
+            <div className="flex flex-col items-center justify-center p-8 gap-6 text-center animate-in fade-in zoom-in duration-500">
               {mundpayPago ? (
                 <>
-                  <div className="size-20 rounded-full bg-emerald-500/20 flex items-center justify-center animate-in zoom-in duration-500">
+                  <div className="size-20 rounded-full bg-emerald-500/20 flex items-center justify-center animate-bounce">
                     <CheckCircle2 className="size-10 text-emerald-500" />
                   </div>
                   <h2 className="text-2xl font-bold text-emerald-400">Pagamento Confirmado!</h2>
                   <p className="text-sm text-muted-foreground">
-                    Seu pagamento via MundPay foi aprovado com sucesso.
-                    Você receberá o produto no e-mail informado.
+                    Seu pagamento foi aprovado com sucesso.
+                    Você receberá o acesso ao produto no e-mail informado.
                   </p>
                 </>
               ) : (
                 <>
-                  <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Loader2 className="size-10 text-primary animate-spin" />
+                  <div className="relative flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                    <div className="relative size-20 rounded-full bg-primary/20 flex items-center justify-center shadow-[0_0_20px_hsl(var(--primary)_/_20%)]">
+                      <Loader2 className="size-10 text-primary animate-spin" />
+                    </div>
                   </div>
-                  <h2 className="text-xl font-bold">Aguardando Pagamento</h2>
+                  <h2 className="text-xl font-bold">Aguardando confirmação...</h2>
                   <p className="text-sm text-muted-foreground">
-                    Complete o pagamento na janela do MundPay.
-                    Esta página atualizará automaticamente quando seu pagamento for confirmado.
+                    Finalize o pagamento do Pix na janela que se abriu para liberar seu acesso. Esta página atualizará automaticamente em instantes.
                   </p>
 
                   <div className="flex flex-col gap-3 w-full mt-2">
@@ -566,7 +568,7 @@ export function CheckoutShell({
                       className="sco-btn w-full flex items-center justify-center gap-2"
                     >
                       <ExternalLink className="size-4" />
-                      Reabrir checkout MundPay
+                      Não abriu? Clique aqui para ver o Pix
                     </button>
                     <button
                       onClick={() => {
@@ -576,13 +578,12 @@ export function CheckoutShell({
                       }}
                       className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
                     >
-                      Cancelar e voltar
+                      Voltar ao formulário
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
-                    <div className="size-2 rounded-full bg-yellow-500 animate-pulse" />
-                    Verificando status a cada poucos segundos...
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4 p-3 bg-muted/40 rounded-lg">
+                    <Ico.Shield /> Transação 100% segura. Verificando...
                   </div>
                 </>
               )}
@@ -755,7 +756,7 @@ export function CheckoutShell({
             {method === "pix" && (
               <button className="sco-cta mt-4" onClick={onPay} disabled={isGeneratingPix}>
                 {isGeneratingPix ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ico.Lock />}
-                Gerar QR Code Pix · {fmtBRL(amount)}
+                {isMundPayActive ? "Continuar para o Pagamento" : `Gerar QR Code Pix · ${fmtBRL(amount)}`}
               </button>
             )}
 

@@ -259,6 +259,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 checkoutUrl.searchParams.set('phone', phoneDigits)
                 checkoutUrl.searchParams.set('phone_number', phoneDigits)
             }
+            // Força a seleção do PIX no checkout da MundPay
+            checkoutUrl.searchParams.set('payment_method', 'pix')
 
             console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
 
