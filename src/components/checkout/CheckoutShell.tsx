@@ -356,20 +356,36 @@ export function CheckoutShell({
   const { payments, tracking, getStatus, loading } = useIntegrations();
   const [isGeneratingPix, setIsGeneratingPix] = useState(false);
   const [stripePromise, setStripePromise] = useState<any>(null);
+  const methodAutoSwitched = useRef(false);
 
+  // ── STRIPE: ativo se o produto habilita OU se a integração global está ativa ──
   const isStripeActive = useMemo(() => {
+    // Se o produto diz explicitamente que Stripe está desabilitado, respeitar
     if (product && product.stripe_enabled === false) return false;
+
+    // Se o produto diz explicitamente que Stripe está habilitado,
+    // considerar ativo MESMO durante loading (não depende do banco)
+    if (product?.stripe_enabled === true) return true;
+
+    // Caso contrário (stripe_enabled é undefined/null), depende do status global
+    if (loading) return false; // ainda carregando, não sabemos
     return getStatus(payments, 'stripe') === 'active';
-  }, [payments, getStatus, product?.stripe_enabled]);
+  }, [payments, getStatus, product?.stripe_enabled, product, loading]);
 
   const isPushinPayActive = useMemo(() => {
     if (product && product.pushinpay_enabled === false) return false;
+    if (product?.pushinpay_enabled === true) {
+      if (loading) return true;
+      const status = getStatus(payments, 'pushinpay');
+      return status !== 'inactive';
+    }
+    if (loading) return false;
     const status = getStatus(payments, 'pushinpay');
     if (status === 'inactive') return false;
     if (status === 'active') return true;
     const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
     return !!token && token.length > 20 && !token.includes('placeholder');
-  }, [payments, getStatus, product?.pushinpay_enabled]);
+  }, [payments, getStatus, product?.pushinpay_enabled, loading]);
 
   const isMundPayActive = useMemo(() => {
     // Se o produto tem uma URL MundPay, forçamos como ativo SEMPRE (prioridade máxima)
@@ -378,19 +394,34 @@ export function CheckoutShell({
     // Só checa mundpay_enabled se não tiver URL (campo genérico de controle)
     if (product && product.mundpay_enabled === false) return false;
 
+    if (loading) return false;
     const status = getStatus(payments, 'mundpay');
     if (status === 'inactive') return false;
     if (status === 'active') return true;
     const token = import.meta.env.VITE_MUNDPAY_API_TOKEN;
     return !!token && token.length > 10 && !token.includes('placeholder');
-  }, [payments, getStatus, product?.mundpay_url, product?.mundpay_enabled]);
+  }, [payments, getStatus, product?.mundpay_url, product?.mundpay_enabled, loading]);
 
+  // ── STRIPE: Carregar chave pública (PK) ──
+  // Roda assim que isStripeActive for true, sem esperar loading completo
   useEffect(() => {
-    const pk = (import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY;
-    if (pk && pk !== 'pk_live_placeholder' && isStripeActive) {
+    if (!isStripeActive) return;
+    if (stripePromise) return; // já inicializado, não refazer
+
+    // 1. Tentar do ENV
+    let pk = (import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY;
+
+    // 2. Se ENV vazio/placeholder, buscar da config do banco
+    if (!pk || pk.includes('placeholder')) {
+      const config = payments.find(p => p.id === 'stripe')?.config;
+      if (config?.pubKey) pk = config.pubKey as string;
+    }
+
+    if (pk && !pk.includes('placeholder')) {
+      console.log("[Stripe] Inicializando com PK:", pk.slice(0, 8) + "...");
       setStripePromise(loadStripe(pk));
     }
-  }, [isStripeActive]);
+  }, [isStripeActive, payments, stripePromise]);
 
   const displayProduct = useMemo(() => {
     let img = product?.image_url;
@@ -443,14 +474,18 @@ export function CheckoutShell({
     return () => clearInterval(interval);
   }, [mundpayPedidoId, mundpayPending]);
 
+  // ── Auto-switch de método: só roda UMA VEZ após carregar integrações ──
   useEffect(() => {
     if (loading) return;
+    if (methodAutoSwitched.current) return; // já fez switch, não repetir
+    methodAutoSwitched.current = true;
+
     if (method === 'card' && !isStripeActive) {
       if (isPushinPayActive || isMundPayActive) setMethod('pix');
     } else if (method === 'pix' && !isPushinPayActive && !isMundPayActive) {
       if (isStripeActive) setMethod('card');
     }
-  }, [isStripeActive, isPushinPayActive, isMundPayActive, loading, method]);
+  }, [isStripeActive, isPushinPayActive, isMundPayActive, loading]);
 
   const amount = displayProduct.price;
   const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);

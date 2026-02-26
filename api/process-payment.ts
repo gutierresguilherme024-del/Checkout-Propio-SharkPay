@@ -85,10 +85,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .select('config, enabled')
                 .eq('id', 'stripe')
                 .single()
-            if (integ?.enabled && integ.config?.secKey) {
+            // Se tiver chave no banco, usa ela (prioridade sobre o ENV)
+            if (integ?.config?.secKey && !String(integ.config.secKey).includes('placeholder')) {
                 stripeKey = integ.config.secKey as string
             }
-        } catch { /* usa env */ }
+        } catch { /* usa env como fallback */ }
 
         if (!stripeKey || stripeKey.includes('placeholder')) {
             return res.status(500).json({ error: 'Stripe não configurado. Configure em Admin → Pagamentos.' })
