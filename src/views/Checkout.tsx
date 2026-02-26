@@ -8,6 +8,7 @@ import { HeroGlow } from "@/components/brand/HeroGlow";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NavLink } from "@/components/NavLink";
+import { integrationService } from "@/lib/integrations";
 
 interface Produto {
   nome: string;
@@ -16,6 +17,7 @@ interface Produto {
   imagem_url: string | null;
   checkout_slug: string;
   ativo: boolean;
+  mundpay_url?: string | null;
 }
 
 interface PixData {
@@ -29,16 +31,28 @@ export default function PublicCheckout() {
   const [produto, setProduto] = useState<Produto | null>(null);
   const [loading, setLoading] = useState(true);
   const [pixData, setPixData] = useState<PixData | null>(null);
-
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState(defaultCheckoutSettings);
 
   useEffect(() => {
-    async function fetchProduto() {
-      if (!slug || slug === 'demo') {
+    async function fetchData() {
+      if (!slug) {
         setLoading(false);
         return;
       }
       try {
+        // 1. Carregar configurações globais
+        const globalSettings = await integrationService.getGlobalSettings();
+        if (globalSettings) {
+          setSettings(prev => ({ ...prev, ...globalSettings }));
+        }
+
+        if (slug === 'demo') {
+          setLoading(false);
+          return;
+        }
+
+        // 2. Carregar produto
         const { data, error: sbError } = await supabase
           .from('produtos')
           .select('*')
@@ -47,10 +61,13 @@ export default function PublicCheckout() {
           .single();
 
         if (sbError) {
-          console.error("Erro Supabase:", sbError);
-          setError(sbError.message);
+          console.error("[Checkout] Erro ao buscar produto:", sbError);
+          setError(`${sbError.message} (${sbError.code})`);
         } else if (data) {
+          console.log("[Checkout] Produto carregado:", data.nome);
           setProduto(data);
+        } else {
+          console.warn("[Checkout] Nenhum produto encontrado para o slug:", slug);
         }
       } catch (err: any) {
         console.error("Erro fatal:", err);
@@ -59,7 +76,7 @@ export default function PublicCheckout() {
         setLoading(false);
       }
     }
-    fetchProduto();
+    fetchData();
   }, [slug]);
 
   if (loading) return (
@@ -85,9 +102,9 @@ export default function PublicCheckout() {
           <div className="sco-page-body relative z-10">
             <CheckoutShell
               settings={{
-                ...defaultCheckoutSettings,
-                headline: "Demonstração SharkPay",
-                subheadline: "Veja como seu checkout ficará para seus clientes."
+                ...settings,
+                headline: settings.headline || "Demonstração SharkPay",
+                subheadline: settings.subheadline || "Veja como seu checkout ficará para seus clientes."
               }}
               product={{
                 name: "Produto Demonstração",
@@ -136,39 +153,19 @@ export default function PublicCheckout() {
       <HeroGlow className="flex-1 flex flex-col">
         <div className="sco-page-body relative z-10">
           <CheckoutShell
-            settings={{ ...defaultCheckoutSettings }}
+            settings={settings}
             product={{
               name: produto.nome,
               price: produto.preco,
               image_url: produto.imagem_url,
-              delivery_content: produto.descricao || ""
+              delivery_content: produto.descricao || "",
+              mundpay_url: produto.mundpay_url
             }}
             onPaySuccess={(data) => {
               if (data.qr_code) setPixData(data);
             }}
           />
 
-          {pixData && (
-            <div className="mt-8 flex flex-col items-center gap-4 p-6 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <p className="text-white font-semibold">Escaneie o QR Code para pagar</p>
-              <img src={`data:image/png;base64,${pixData.qr_code}`} className="w-48 h-48 rounded-lg" alt="QR Code Pix" />
-              <div className="w-full p-3 bg-slate-700 rounded-lg flex items-center gap-2">
-                <span className="text-xs text-slate-300 truncate flex-1">{pixData.qr_code_text}</span>
-                <button
-                  onClick={() => {
-                    if (pixData.qr_code_text) {
-                      navigator.clipboard.writeText(pixData.qr_code_text)
-                      alert('Código copiado!')
-                    }
-                  }}
-                  className="text-xs px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
-                >
-                  Copiar
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 text-center">Após o pagamento o produto será entregue automaticamente no seu email</p>
-            </div>
-          )}
         </div>
       </HeroGlow>
     </div>

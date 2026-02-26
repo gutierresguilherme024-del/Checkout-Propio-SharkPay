@@ -1,12 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { cn, normalizeImageUrl } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { integrationService } from "@/lib/integrations";
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/use-integrations";
-import { criarPix } from "@/lib/pushinpay";
-import { criarCheckoutStripe } from "@/lib/stripe";
 import type { CheckoutSettings, PaymentMethod } from "./types";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+
+// Helper: chama a API unificada de pagamento
+async function processarPagamento(payload: Record<string, unknown>) {
+  const res = await fetch('/api/process-payment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.erro || 'Erro no servidor de pagamentos');
+  return data;
+}
+
+// Helper: obter token reCAPTCHA v3 (se disponível)
+async function getRecaptchaToken(action = 'checkout'): Promise<string | null> {
+  try {
+    const siteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
+    if (!siteKey || !(window as any).grecaptcha) return null;
+    return await (window as any).grecaptcha.execute(siteKey, { action });
+  } catch {
+    return null;
+  }
+}
 
 /* ─── formatters ─────────────────────────────────────── */
 function fmtBRL(v: number) {
@@ -79,9 +104,112 @@ const Ico = {
   ),
 };
 
-/* ─── PIX QR Modal ──────────────────────────────────── */
 const MOCK_PIX = "00020126580014BR.GOV.BCB.PIX0136e464f9b4-5e73-4a81-a88d-98c76e39c52352040000530398654071234.565802BR5924SharkPay Checkout Dev60145302BR62070503***63047A8F";
 
+/* ─── Stripe Card Form Component ──────────────────── */
+function StripeCardForm({
+  onSuccess,
+  amount,
+  payload,
+  isProcessing,
+  setIsProcessing
+}: {
+  onSuccess: () => void;
+  amount: number;
+  payload: any;
+  isProcessing: boolean;
+  setIsProcessing: (v: boolean) => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements || isProcessing) return;
+
+    if (!payload.nome || !payload.email) {
+      toast.error("Preencha seu nome e e-mail primeiro.");
+      return;
+    }
+
+    setIsProcessing(true);
+    const toastId = toast.loading("Processando pagamento...");
+
+    try {
+      const data = await processarPagamento(payload);
+
+      if (!data.clientSecret) {
+        throw new Error(data.error || "Falha ao obter segredo de pagamento");
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(data.clientSecret, {
+        payment_method: {
+          card: elements.getElement(CardElement)!,
+          billing_details: {
+            name: payload.nome,
+            email: payload.email,
+          }
+        }
+      });
+
+      if (error) throw new Error(error.message);
+
+      if (paymentIntent.status === 'succeeded') {
+        toast.success("Pagamento confirmado!", { id: toastId });
+        onSuccess();
+      } else {
+        throw new Error("Pagamento não concluído. Status: " + paymentIntent.status);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao processar cartão", { id: toastId });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-1">
+      <div className="sco-field mb-4">
+        <label className="sco-lbl mb-2">Dados do cartão</label>
+        <div className="sco-inp-stripe">
+          <CardElement options={{
+            style: {
+              base: {
+                fontSize: '16px',
+                color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+                fontFamily: 'Inter, sans-serif',
+                "::placeholder": {
+                  color: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#aab7c4'
+                }
+              }
+            }
+          }} />
+        </div>
+      </div>
+
+      <button type="submit" className="sco-cta" disabled={isProcessing || !stripe}>
+        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ico.Lock />}
+        Pagar {fmtBRL(amount)}
+      </button>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .sco-inp-stripe {
+          padding: 0.75rem 0.8rem;
+          border-radius: 0.55rem;
+          border: 1.5px solid hsl(var(--border));
+          background: hsl(var(--background));
+          min-height: 2.6rem;
+          display: flex;
+          align-items: center;
+        }
+        .sco-inp-stripe .StripeElement { width: 100%; }
+      `}} />
+    </form>
+  );
+}
+
+/* ─── Pix Modal Component ─────────────────────────── */
 function PixModal({
   amount,
   onClose,
@@ -109,15 +237,19 @@ function PixModal({
   }, [onClose]);
 
   const doCopy = async () => {
-    try { await navigator.clipboard.writeText(pixValue); } catch (err) { console.warn("Erro ao copiar PIX:", err); }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    try {
+      await navigator.clipboard.writeText(pixValue);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      toast.success("Código Pix copiado!");
+    } catch (err) {
+      console.warn("Erro ao copiar PIX:", err);
+    }
   };
 
   return (
     <div className="pix-overlay" onClick={(e) => e.target === e.currentTarget && onClose()} role="dialog" aria-modal>
       <div className="pix-panel">
-        {/* header */}
         <div className="pix-panel-hd">
           <span className="pix-panel-title">
             <span className="pix-dot" />
@@ -126,43 +258,35 @@ function PixModal({
           <button onClick={onClose} className="pix-close" aria-label="Fechar"><Ico.Close /></button>
         </div>
 
-        {/* amount */}
         <div className="pix-amount-row">
           <span>Valor a pagar</span>
           <strong>{fmtBRL(amount)}</strong>
         </div>
 
-        {/* QR */}
         <div className="pix-qr-wrap">
           <div className="pix-qr-box">
             {qrCode ? (
-              <img src={`data:image/png;base64,${qrCode}`} className="w-full h-full object-contain" alt="QR Code Pix" />
+              <img
+                src={qrCode.startsWith('http') || qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode}`}
+                className="w-full h-full object-contain"
+                alt="QR Code Pix"
+              />
             ) : (
               <svg width="148" height="148" viewBox="0 0 148 148" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Finder pattern TL */}
                 <rect x="8" y="8" width="42" height="42" rx="5" fill="currentColor" />
                 <rect x="14" y="14" width="30" height="30" rx="3" fill="white" />
                 <rect x="20" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
-                {/* Finder pattern TR */}
                 <rect x="98" y="8" width="42" height="42" rx="5" fill="currentColor" />
                 <rect x="104" y="14" width="30" height="30" rx="3" fill="white" />
                 <rect x="110" y="20" width="18" height="18" rx="1.5" fill="currentColor" />
-                {/* Finder pattern BL */}
                 <rect x="8" y="98" width="42" height="42" rx="5" fill="currentColor" />
                 <rect x="14" y="104" width="30" height="30" rx="3" fill="white" />
                 <rect x="20" y="110" width="18" height="18" rx="1.5" fill="currentColor" />
-                {/* Data modules */}
                 {[60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].flatMap((x, i) =>
                   [8, 13, 18, 23, 28, 33, 38, 43, 48, 55].map((y, j) =>
-                    (i + j) % 3 !== 0 ? <rect key={`${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i * j) % 5 === 0 ? 0.3 : 1} /> : null
+                    (i + j) % 3 !== 0 ? <rect key={`${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" /> : null
                   )
                 )}
-                {[8, 14, 20, 26, 32, 38, 44, 50, 56, 62, 68, 74, 80, 86, 92, 98, 104, 110, 116, 122, 128].flatMap((y, i) =>
-                  [60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135].map((x, j) =>
-                    (i + j) % 4 !== 1 ? <rect key={`d-${i}-${j}`} x={x} y={y} width="4" height="4" rx="0.8" fill="currentColor" opacity={(i + j) % 7 === 0 ? 0.2 : 0.85} /> : null
-                  )
-                )}
-                {/* center logo */}
                 <rect x="56" y="56" width="36" height="36" rx="6" fill="white" />
                 <text x="74" y="79" textAnchor="middle" fill="#32BCAD" fontSize="13" fontWeight="800" fontFamily="system-ui">PIX</text>
               </svg>
@@ -171,14 +295,12 @@ function PixModal({
           <p className="pix-qr-hint">Escaneie com o app do seu banco</p>
         </div>
 
-        {/* steps */}
         <ol className="pix-steps">
           {["Abra o app do seu banco", "Selecione Pix → Pagar", "Escaneie ou use o código abaixo"].map((s, i) => (
             <li key={i}><span className="pix-step-n">{i + 1}</span>{s}</li>
           ))}
         </ol>
 
-        {/* copy */}
         <div className="pix-copy-block">
           <div className="pix-copy-label">Pix copia e cola</div>
           <div className="pix-copy-row">
@@ -190,13 +312,11 @@ function PixModal({
           </div>
         </div>
 
-        {/* expiry */}
         <div className="pix-expiry">
           <Ico.Clock />
           QR expira em <strong>{expiresAt ? new Date(expiresAt).toLocaleTimeString() : '30 minutos'}</strong>
         </div>
 
-        {/* footer */}
         <div className="pix-panel-ft">
           <Ico.Shield />
           Transação processada com segurança pelo SharkPay
@@ -206,20 +326,7 @@ function PixModal({
   );
 }
 
-/* ─── Card brand badges ───────────────────────────────── */
-function Brands() {
-  return (
-    <div className="sco-brands">
-      {[["VISA", "#1a1f71", "#fff"], ["MC", "#eb001b", "#fff"], ["ELO", "#ffcb05", "#000"], ["AMEX", "#016fd0", "#fff"]].map(([n, bg, c]) => (
-        <span key={n} className="sco-brand" style={{ background: bg, color: c }}>{n}</span>
-      ))}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   MAIN COMPONENT
-═══════════════════════════════════════════════════════ */
+/* ────────────────────────────────────────────────────────── */
 
 export type CheckoutShellProps = {
   settings: CheckoutSettings;
@@ -228,6 +335,7 @@ export type CheckoutShellProps = {
     price: number;
     image_url?: string | null;
     delivery_content: string;
+    mundpay_url?: string | null;
   } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
@@ -241,39 +349,41 @@ export function CheckoutShell({
   onCaptureUtm,
   onPaySuccess
 }: CheckoutShellProps) {
-  /* integration status */
   const { payments, tracking, getStatus, loading } = useIntegrations();
+  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+  const [stripePromise, setStripePromise] = useState<any>(null);
 
-  const isStripeActive = useMemo(() => {
-    return getStatus(payments, 'stripe') === 'active';
-  }, [payments, getStatus]);
-
+  const isStripeActive = useMemo(() => getStatus(payments, 'stripe') === 'active', [payments, getStatus]);
   const isPushinPayActive = useMemo(() => {
+    const status = getStatus(payments, 'pushinpay');
+    if (status === 'inactive') return false;
+    if (status === 'active') return true;
     const token = import.meta.env.VITE_PUSHINPAY_TOKEN;
-    return getStatus(payments, 'pushinpay') === 'active' || (!!token && token !== 'pp_live_placeholder');
+    return !!token && token.length > 20 && !token.includes('placeholder');
   }, [payments, getStatus]);
 
   const isMundPayActive = useMemo(() => {
-    return getStatus(payments, 'mundpay') === 'active';
-  }, [payments, getStatus]);
+    // Se o produto tem uma URL MundPay, forçamos como ativo para este checkout
+    if (product?.mundpay_url) return true;
 
-  const [isGeneratingPix, setIsGeneratingPix] = useState(false);
+    const status = getStatus(payments, 'mundpay');
+    if (status === 'inactive') return false;
+    if (status === 'active') return true;
+    const token = import.meta.env.VITE_MUNDPAY_API_TOKEN;
+    return !!token && token.length > 10 && !token.includes('placeholder');
+  }, [payments, getStatus, product?.mundpay_url]);
 
-  /* product display data */
+  useEffect(() => {
+    const pk = (import.meta as any).env.VITE_STRIPE_PUBLISHABLE_KEY;
+    if (pk && pk !== 'pk_live_placeholder' && isStripeActive) {
+      setStripePromise(loadStripe(pk));
+    }
+  }, [isStripeActive]);
+
   const displayProduct = useMemo(() => {
     let img = product?.image_url;
-
-    // Normalizar URL da imagem se for apenas um path do Supabase
-    if (img && !img.startsWith('http') && !img.startsWith('data:')) {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      if (supabaseUrl) {
-        img = `${supabaseUrl}/storage/v1/object/public/produtos-pdf/${img}`;
-      }
-    }
-
-    if (product) return { ...product, image_url: img };
-
-    // Fallback apenas para preview do editor se nenhum produto for passado
+    const imgResolved = normalizeImageUrl(img);
+    if (product) return { ...product, image_url: imgResolved };
     return {
       name: settings.headline || "Produto SharkPay",
       price: 97,
@@ -282,26 +392,20 @@ export function CheckoutShell({
     };
   }, [product, settings.headline]);
 
-  /* state */
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [cardNum, setCardNum] = useState("");
-  const [cardExp, setCardExp] = useState("");
-  const [cardCvc, setCardCvc] = useState("");
-  const [cardHolder, setCardHolder] = useState("");
+  const [cpf, setCpf] = useState("");
   const [consent, setConsent] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pixOpen, setPixOpen] = useState(false);
   const [localPixData, setLocalPixData] = useState<{ qr_code?: string; qr_code_text?: string; expires_at?: string } | null>(null);
 
-  // Se o método padrão não estiver disponível, troca para o outro
   useEffect(() => {
     if (loading) return;
     if (method === 'card' && !isStripeActive) {
       if (isPushinPayActive || isMundPayActive) setMethod('pix');
-    }
-    if (method === 'pix' && !isPushinPayActive && !isMundPayActive) {
+    } else if (method === 'pix' && !isPushinPayActive && !isMundPayActive) {
       if (isStripeActive) setMethod('card');
     }
   }, [isStripeActive, isPushinPayActive, isMundPayActive, loading, method]);
@@ -309,7 +413,6 @@ export function CheckoutShell({
   const amount = displayProduct.price;
   const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
 
-  /* UTM capture */
   useEffect(() => {
     if (mode !== "public") return;
     const p = new URLSearchParams(window.location.search);
@@ -323,164 +426,69 @@ export function CheckoutShell({
     }
   }, [mode, onCaptureUtm]);
 
-  /* brand CSS var */
-  const hue = useMemo(() => settings.primaryHue, [settings.primaryHue]);
-
-  /* input masks */
-  const onCardNum = (v: string) => {
-    const d = v.replace(/\D/g, "").slice(0, 16);
-    setCardNum(d.replace(/(.{4})/g, "$1 ").trim());
-    setErrors(p => ({ ...p, cardNum: "" }));
-  };
-  const onCardExp = (v: string) => {
-    const d = v.replace(/\D/g, "").slice(0, 4);
-    setCardExp(d.length >= 3 ? d.slice(0, 2) + "/" + d.slice(2) : d);
-    setErrors(p => ({ ...p, cardExp: "" }));
-  };
-
-  /* validation */
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!name.trim()) e.name = "Nome obrigatório";
-    if (!email.trim() || !email.includes("@")) e.email = "E-mail inválido";
-    if (method === "card") {
-      if (cardNum.replace(/\s/g, "").length < 13) e.cardNum = "Número inválido";
-      if (cardExp.length < 5) e.cardExp = "Data inválida";
-      if (cardCvc.length < 3) e.cardCvc = "CVV inválido";
-      if (!cardHolder.trim()) e.cardHolder = "Nome obrigatório";
-    }
-    setErrors(e);
-    return !Object.keys(e).length;
-  };
+  const hue = settings.primaryHue;
 
   const onPay = async () => {
-    if (!validate()) return;
-
-    // Capturar dados para envio
-    const payload = {
-      event: method === 'pix' ? 'pix_generated' : 'payment_attempt',
-      customer: { name, email },
-      payment: {
-        method,
-        amount,
-        cardLast4: method === 'card' ? cardNum.slice(-4) : null,
-      },
-      product: {
-        name: displayProduct.name,
-        delivery_content: displayProduct.delivery_content
-      },
-      utms: JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}")
-    };
-
-    // Enviar para o n8n (se configurado)
-    try {
-      if (mode !== "preview") {
-        await integrationService.sendToN8N(payload);
-      }
-    } catch (err) {
-      console.warn("Erro ao enviar para n8n:", err);
+    if (!name.trim() || !email.trim() || !email.includes("@")) {
+      setErrors({ name: !name.trim() ? "Obrigatório" : "", email: !email.trim() || !email.includes("@") ? "E-mail inválido" : "" });
+      return;
     }
 
     if (mode === "preview") {
-      toast.info("Processamento simulado (Modo Preview)");
       if (method === "pix") {
-        setLocalPixData({
-          qr_code_text: "00020126330014br.gov.bcb.pix0111123456789015204000053039865802BR5913SHARKPAY6009SAO PAULO62070503***6304ABCD"
-        });
+        setLocalPixData({ qr_code_text: MOCK_PIX });
         setPixOpen(true);
       } else {
-        toast.success("Simulação de Cartão: Sucesso!");
+        toast.success("Sucesso! (Preview)");
       }
       return;
     }
 
-    if (method === "pix") {
-      try {
-        setIsGeneratingPix(true);
-        const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
-        const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    setIsGeneratingPix(true);
+    const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
+    const recaptcha_token = await getRecaptchaToken();
 
-        if (isPushinPayActive) {
-          // Lógica PushinPay
-          const data = await criarPix({
-            valor: amount,
-            email,
-            nome: name,
-            pedido_id: pedidoId,
-            utm_source: utms.utm_source
-          });
-          setLocalPixData(data);
+    try {
+      // Determinar o gateway de Pix:
+      // Se o produto tem mundpay_url, usar mundpay diretamente
+      // Senão, usar pushinpay se ativo
+      const hasMundPayUrl = !!displayProduct.mundpay_url;
+      const pixGateway = hasMundPayUrl ? 'mundpay' : isPushinPayActive ? 'pushinpay' : isMundPayActive ? 'mundpay' : null;
+
+      const data = await processarPagamento({
+        method, nome: name, email, valor: amount,
+        produto_nome: displayProduct.name,
+        checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
+        utm_source: utms.utm_source || null,
+        gateway: method === 'pix' ? pixGateway : 'stripe',
+        recaptcha_token,
+        cpf: cpf || undefined,
+        mundpay_url: displayProduct.mundpay_url
+      });
+
+      if (method === 'pix') {
+        // MundPay retorna redirect_url, não QR code
+        if (data.redirect_url) {
+          toast.success("Redirecionando para o checkout MundPay...");
+          window.open(data.redirect_url, '_blank');
+          onPaySuccess?.(data);
+        } else {
+          // PushinPay retorna QR code
+          setLocalPixData({ qr_code: data.qr_code, qr_code_text: data.qr_code_text, expires_at: data.expires_at });
           setPixOpen(true);
           onPaySuccess?.(data);
-          toast.success("QR Code Pix (PushinPay) gerado!");
-        } else if (isMundPayActive) {
-          // Lógica MundPay (Especializada em Pix conforme pedido)
-          const resp = await fetch('/api/mundpay/criar-venda', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              valor: amount,
-              email,
-              nome: name,
-              pedido_id: pedidoId,
-              utm_source: utms.utm_source,
-              payment_method: 'pix'
-            })
-          });
-          const data = await resp.json();
-          if (data.qr_code_text || data.qr_code) {
-            setLocalPixData(data);
-            setPixOpen(true);
-            onPaySuccess?.(data);
-            toast.success("QR Code Pix (MundPay) gerado!");
-          } else {
-            throw new Error(data.erro || "Erro ao gerar Pix via MundPay");
-          }
-        } else {
-          toast.error("Nenhuma integração de Pix ativa.");
         }
-      } catch (err) {
-        const error = err as Error;
-        console.error('Erro PIX:', error);
-        toast.error(error.message || "Erro ao gerar PIX");
-      } finally {
-        setIsGeneratingPix(false);
       }
-    } else {
-      // Prioridade: Cartão via Stripe
-      try {
-        setIsGeneratingPix(true);
-        const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
-        const pedidoId = `PED-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-
-        if (isStripeActive) {
-          const { checkout_url } = await criarCheckoutStripe({
-            nome: displayProduct.name,
-            preco: amount,
-            email,
-            pedido_id: pedidoId,
-            checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
-            utm_source: utms.utm_source
-          });
-          if (checkout_url) window.location.href = checkout_url;
-        } else {
-          toast.error("Processamento de cartão (Stripe) não está ativo.");
-        }
-      } catch (err) {
-        const error = err as Error;
-        toast.error(error.message || "Erro ao processar cartão");
-      } finally {
-        setIsGeneratingPix(false);
-      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao processar pagamento');
+    } finally {
+      setIsGeneratingPix(false);
     }
   };
 
-  /* ── render ──────────────────────────────────────── */
   return (
     <>
       <div className="sco-root" style={{ "--sco-h": hue } as React.CSSProperties}>
-
-        {/* ── urgency bar */}
         {(settings.urgencyBarText || settings.timerEnabled) && (
           <div className="sco-bar">
             <span className="sco-bar-txt">{settings.urgencyBarText}</span>
@@ -492,10 +500,7 @@ export function CheckoutShell({
           </div>
         )}
 
-        {/* ── two column layout */}
         <div className="sco-cols">
-
-          {/* LEFT — summary */}
           <aside className="sco-left">
             <div className="sco-logo-wrap">
               <div className="sco-logo">SP</div>
@@ -505,11 +510,9 @@ export function CheckoutShell({
             <div className="sco-sum-product">
               <div className="sco-sum-img-wrap">
                 {displayProduct.image_url ? (
-                  <img src={displayProduct.image_url} alt={displayProduct.name} className="sco-sum-img" />
+                  <img src={displayProduct.image_url} alt={displayProduct.name} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="sco-sum-img-placeholder">
-                    <Ico.Card />
-                  </div>
+                  <div className="sco-sum-img-placeholder"><Ico.Card /></div>
                 )}
               </div>
               <p className="sco-sum-eyebrow">Você está comprando</p>
@@ -522,184 +525,124 @@ export function CheckoutShell({
               <strong>{fmtBRL(amount)}</strong>
             </div>
 
-            {/* includes list */}
             <ul className="sco-sum-features">
-              {["Acesso imediato após confirmação", "Entrega automática por e-mail", "Suporte prioritário", "Garantia incondicional de 7 dias"].map(f => (
+              {["Acesso imediato", "Entrega automática", "Suporte prioritário", "Garantia de 7 dias"].map(f => (
                 <li key={f}><span className="sco-feat-ic"><Ico.Check /></span>{f}</li>
               ))}
             </ul>
 
-            {/* social proof */}
-            {settings.socialProofEnabled && (
-              <div className="sco-social">
-                <div className="sco-social-ava">
-                  {"GMAR".split("").map(l => <span key={l} className="sco-ava">{l}</span>)}
-                </div>
-                <span className="sco-social-txt">{settings.socialProofText}</span>
-              </div>
-            )}
-
             <div className="sco-sum-secure">
               <Ico.Shield />
-              <span>Pagamento 100% seguro e criptografado</span>
+              <span>Pagamento 100% seguro</span>
             </div>
           </aside>
 
-          {/* RIGHT — form */}
           <section className="sco-right">
-
-            {/* contact */}
             <div className="sco-sect">
               <h2 className="sco-sect-ttl">Informações de contato</h2>
               <div className="sco-field">
                 <label className="sco-lbl" htmlFor="sco-name">Nome completo</label>
                 <input id="sco-name" className={cn("sco-inp", errors.name && "sco-inp--err")}
-                  placeholder="Seu nome completo" value={name}
-                  onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: "" })); }} />
-                {errors.name && <span className="sco-err">{errors.name}</span>}
+                  placeholder="Seu nome completo" value={name} onChange={e => setName(e.target.value)} />
               </div>
               <div className="sco-field">
                 <label className="sco-lbl" htmlFor="sco-email">E-mail</label>
                 <input id="sco-email" type="email" className={cn("sco-inp", errors.email && "sco-inp--err")}
-                  placeholder="voce@exemplo.com" value={email}
-                  onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: "" })); }} />
-                {errors.email && <span className="sco-err">{errors.email}</span>}
+                  placeholder="voce@exemplo.com" value={email} onChange={e => setEmail(e.target.value)} />
               </div>
+
+              {isMundPayActive && (
+                <div className="sco-field animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="sco-lbl" htmlFor="sco-cpf">CPF do Comprador <span className="text-muted-foreground">(opcional)</span></label>
+                  <input id="sco-cpf" className={cn("sco-inp", errors.cpf && "sco-inp--err")}
+                    placeholder="000.000.000-00"
+                    value={cpf}
+                    onChange={e => {
+                      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+                      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d+)/, "$1.$2.$3");
+                      else if (v.length > 3) v = v.replace(/(\d{3})(\d+)/, "$1.$2");
+                      setCpf(v);
+                    }}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Preencha para pré-preencher no checkout.</p>
+                </div>
+              )}
             </div>
 
-            {/* payment selector */}
             <div className="sco-sect">
               <h2 className="sco-sect-ttl">Forma de pagamento</h2>
-              <div className="sco-tabs" role="tablist">
+              <div className="sco-tabs mb-4">
                 {isStripeActive && (
-                  <button role="tab" aria-selected={method === "card"} id="tab-card"
-                    className={cn("sco-tab", method === "card" && "sco-tab--on")}
-                    onClick={() => setMethod("card")}>
-                    <Ico.Card /> Cartão de crédito
+                  <button className={cn("sco-tab", method === "card" && "sco-tab--on")} onClick={() => setMethod("card")}>
+                    <Ico.Card /> Cartão
                   </button>
                 )}
                 {(isPushinPayActive || isMundPayActive) && (
-                  <button role="tab" aria-selected={method === "pix"} id="tab-pix"
-                    className={cn("sco-tab", method === "pix" && "sco-tab--on")}
-                    onClick={() => setMethod("pix")}>
+                  <button className={cn("sco-tab", method === "pix" && "sco-tab--on")} onClick={() => setMethod("pix")}>
                     <Ico.Pix /> Pix
                   </button>
                 )}
-                {!isStripeActive && !isPushinPayActive && !loading && (
-                  <div className="text-destructive text-xs p-3 rounded-lg bg-destructive/10 border border-destructive/20 w-full text-center">
-                    Nenhuma forma de pagamento configurada.
-                  </div>
-                )}
               </div>
 
-              {/* CARD FORM */}
-              {method === "card" && (
-                <div className="sco-card-form" role="tabpanel" aria-labelledby="tab-card">
-                  <div className="sco-field">
-                    <div className="sco-lbl-row">
-                      <label className="sco-lbl" htmlFor="sco-cnum">Número do cartão</label>
-                      <Brands />
-                    </div>
-                    <input id="sco-cnum" className={cn("sco-inp sco-inp--mono", errors.cardNum && "sco-inp--err")}
-                      placeholder="1234 5678 9012 3456" inputMode="numeric" value={cardNum}
-                      onChange={e => onCardNum(e.target.value)} />
-                    {errors.cardNum && <span className="sco-err">{errors.cardNum}</span>}
-                  </div>
-                  <div className="sco-row2">
-                    <div className="sco-field">
-                      <label className="sco-lbl" htmlFor="sco-exp">Validade</label>
-                      <input id="sco-exp" className={cn("sco-inp sco-inp--mono", errors.cardExp && "sco-inp--err")}
-                        placeholder="MM/AA" inputMode="numeric" value={cardExp}
-                        onChange={e => onCardExp(e.target.value)} />
-                      {errors.cardExp && <span className="sco-err">{errors.cardExp}</span>}
-                    </div>
-                    <div className="sco-field">
-                      <label className="sco-lbl" htmlFor="sco-cvc">CVC</label>
-                      <input id="sco-cvc" className={cn("sco-inp sco-inp--mono", errors.cardCvc && "sco-inp--err")}
-                        placeholder="123" maxLength={4} inputMode="numeric" value={cardCvc}
-                        onChange={e => { setCardCvc(e.target.value.replace(/\D/g, "").slice(0, 4)); setErrors(p => ({ ...p, cardCvc: "" })); }} />
-                      {errors.cardCvc && <span className="sco-err">{errors.cardCvc}</span>}
-                    </div>
-                  </div>
-                  <div className="sco-field">
-                    <label className="sco-lbl" htmlFor="sco-holder">Nome no cartão</label>
-                    <input id="sco-holder" className={cn("sco-inp", errors.cardHolder && "sco-inp--err")}
-                      placeholder="Como está impresso no cartão" value={cardHolder}
-                      onChange={e => { setCardHolder(e.target.value); setErrors(p => ({ ...p, cardHolder: "" })); }} />
-                    {errors.cardHolder && <span className="sco-err">{errors.cardHolder}</span>}
-                  </div>
+              {method === "card" && isStripeActive && stripePromise ? (
+                <div className="sco-card-form p-1">
+                  <p className="text-[13px] text-muted-foreground mb-4">
+                    Insira os dados do seu cartão com total segurança.
+                  </p>
+                  <Elements stripe={stripePromise}>
+                    <StripeCardForm
+                      amount={amount}
+                      isProcessing={isGeneratingPix}
+                      setIsProcessing={setIsGeneratingPix}
+                      payload={{
+                        method: 'card', nome: name, email, valor: amount,
+                        produto_nome: displayProduct.name,
+                        checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
+                        utm_source: JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}").utm_source || null,
+                        gateway: 'stripe'
+                      }}
+                      onSuccess={() => {
+                        const slug = window.location.pathname.split('/checkout/')[1] || '';
+                        window.location.href = `/sucesso?pedido_id=${Date.now()}&slug=${slug}`;
+                      }}
+                    />
+                  </Elements>
                 </div>
-              )}
-
-              {/* PIX INFO */}
-              {method === "pix" && (
-                <div className="sco-pix-info" role="tabpanel" aria-labelledby="tab-pix">
+              ) : method === "pix" ? (
+                <div className="sco-pix-info">
                   <div className="sco-pix-ic"><Ico.Pix /></div>
                   <div>
-                    <p className="sco-pix-ttl">Pagamento instantâneo</p>
-                    <p className="sco-pix-desc">
-                      Ao finalizar, um QR Code Pix será gerado. Escaneie com o app do seu banco para concluir.
-                    </p>
+                    <p className="sco-pix-ttl">Pagamento via Pix</p>
+                    <p className="sco-pix-desc">O QR Code será gerado após clicar no botão abaixo.</p>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* consent */}
-            <label className="sco-consent">
-              <span className="sco-chk-wrap">
-                <input type="checkbox" className="sco-chk" checked={consent} onChange={e => setConsent(e.target.checked)} id="sco-consent" />
-                <span className="sco-chk-ui" />
-              </span>
-              <span className="sco-consent-txt">Quero receber atualizações e suporte por e-mail</span>
-            </label>
+            {method === "pix" && (
+              <button className="sco-cta mt-4" onClick={onPay} disabled={isGeneratingPix}>
+                {isGeneratingPix ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ico.Lock />}
+                Gerar QR Code Pix · {fmtBRL(amount)}
+              </button>
+            )}
 
-            {/* CTA */}
-            <button id="sco-pay-btn" className="sco-cta" onClick={onPay} disabled={isGeneratingPix}>
-              {isGeneratingPix ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : <Ico.Lock />}
-              {method === "pix" ? `Gerar QR Code Pix · ${fmtBRL(amount)}` : `Pagar ${fmtBRL(amount)}`}
-            </button>
-
-            {/* guarantee */}
-            <div className="sco-guarantee">
+            <div className="sco-guarantee mt-6">
               <span>🛡️</span>
               <p>{settings.guaranteeText}</p>
             </div>
-
-            {/* powered */}
-            <div className="sco-powered">
-              <Ico.Lock /> Pagamento seguro via <strong>SharkPay</strong>
-            </div>
           </section>
         </div>
-
-        {/* floating message (desktop) */}
-        {settings.floatingMessageEnabled && (
-          <div className="sco-float-msg" aria-hidden>
-            🔥 {settings.floatingMessageText}
-          </div>
-        )}
-
-        {/* countdown done */}
-        {done && settings.timerEnabled && (
-          <div className="sco-expired">⚠️ O temporizador encerrou. Esta oferta pode ter expirado.</div>
-        )}
       </div>
 
-      {/* PIX MODAL */}
-      {pixOpen && localPixData && (
+      {pixOpen && (
         <PixModal
           amount={amount}
           onClose={() => setPixOpen(false)}
-          qrCode={localPixData.qr_code}
-          qrCodeText={localPixData.qr_code_text}
-          expiresAt={localPixData.expires_at}
+          qrCode={localPixData?.qr_code}
+          qrCodeText={localPixData?.qr_code_text}
+          expiresAt={localPixData?.expires_at}
         />
-      )}
-      {pixOpen && !localPixData && (
-        <PixModal amount={amount} onClose={() => setPixOpen(false)} />
       )}
     </>
   );

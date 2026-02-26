@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Package, Plus, Save, Trash2, FileText, ImageIcon, Loader2, Copy, Check, Link, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Pencil, Save, X, Search, Package, Eye, Power, FileText, Check, Copy, ImageIcon, Loader2, Link, ExternalLink, CreditCard, ChevronRight } from "lucide-react";
+import { normalizeImageUrl } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Product {
@@ -20,6 +21,7 @@ interface Product {
     stripe_product_id?: string;
     stripe_price_id?: string;
     checkout_slug?: string | null;
+    mundpay_url?: string | null;
 }
 
 const APP_URL = window.location.origin;
@@ -120,7 +122,7 @@ async function apiAtualizarProduto(id: string, campos: Record<string, any>): Pro
     return data as any;
 }
 
-async function apiUploadArquivo(file: File): Promise<{ path: string; url: string }> {
+async function apiUploadArquivo(file: File, bucket: 'imagens-produtos' | 'produtos-pdf'): Promise<{ path: string; url: string }> {
     try {
         const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -132,19 +134,19 @@ async function apiUploadArquivo(file: File): Promise<{ path: string; url: string
         const res = await fetch('/api/produtos/upload', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base64, mimeType: file.type, fileName: file.name })
+            body: JSON.stringify({ base64, mimeType: file.type, fileName: file.name, bucket })
         });
         if (res.ok) return res.json();
     } catch (e) {
         console.warn("API de upload offline, tentando upload direto...");
     }
 
-    // Fallback: upload direto via cliente Supabase para o bucket 'produtos-pdf'
+    // Fallback: upload direto via cliente Supabase
     const ext = file.name.split('.').pop() || 'bin'
     const uniqueFileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
 
     const { data, error } = await supabaseClient.storage
-        .from('produtos-pdf')
+        .from(bucket)
         .upload(uniqueFileName, file, {
             contentType: file.type,
             upsert: true
@@ -153,7 +155,7 @@ async function apiUploadArquivo(file: File): Promise<{ path: string; url: string
     if (error) throw error;
 
     const { data: urlData } = supabaseClient.storage
-        .from('produtos-pdf')
+        .from(bucket)
         .getPublicUrl(data.path);
 
     return {
@@ -206,8 +208,10 @@ export default function AdminProducts() {
     const [preco, setPreco] = useState("");
     const [descricao, setDescricao] = useState("");
     const [ativo, setAtivo] = useState(true);
+    const [mundpayUrl, setMundpayUrl] = useState("");
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [pdfFile, setPdfFile] = useState<File | null>(null);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
     useEffect(() => {
         fetchProducts();
@@ -241,6 +245,16 @@ export default function AdminProducts() {
         }
     }
 
+    const startEdit = (product: Product) => {
+        setEditingProduct(product);
+        setIsAdding(true);
+        setNome(product.nome);
+        setPreco(product.preco.toString());
+        setDescricao(product.descricao || "");
+        setAtivo(product.ativo);
+        setMundpayUrl(product.mundpay_url || "");
+    };
+
     async function handleSave() {
         if (!nome || !preco) {
             toast.error("Nome e preço são obrigatórios");
@@ -248,6 +262,7 @@ export default function AdminProducts() {
         }
 
         setIsSaving(true);
+        console.log(`[Products] Salvando produto. Editing: ${!!editingProduct}`, { nome, preco, mundpayUrl });
 
         try {
             let imagem_url: string | null = null;
@@ -255,41 +270,63 @@ export default function AdminProducts() {
 
             if (imageFile) {
                 toast.info("Enviando imagem...");
-                const uploadResult = await apiUploadArquivo(imageFile);
+                const uploadResult = await apiUploadArquivo(imageFile, 'imagens-produtos');
                 imagem_url = uploadResult.url;
             }
 
             if (pdfFile) {
                 toast.info("Enviando PDF...");
-                const uploadResult = await apiUploadArquivo(pdfFile);
+                const uploadResult = await apiUploadArquivo(pdfFile, 'produtos-pdf');
                 pdf_storage_key = uploadResult.path;
             }
 
-            // Sincronizar com Stripe (opcional — não bloqueia se falhar)
-            const stripeData = await criarProdutoNoStripe(nome, parseFloat(preco), descricao);
+            let produtoSalvo: Product;
 
-            // Criar produto via API serverless (bypass de RLS com service_role)
-            const novoProduto = await apiCriarProduto({
-                nome,
-                preco: parseFloat(preco),
-                descricao,
-                ativo,
-                imagem_url,
-                pdf_storage_key,
-                stripe_product_id: stripeData?.stripe_product_id || null,
-                stripe_price_id: stripeData?.stripe_price_id || null,
-            });
+            if (editingProduct) {
+                // Update existing product
+                const camposParaAtualizar: Record<string, any> = {
+                    nome,
+                    preco: parseFloat(preco),
+                    descricao,
+                    ativo,
+                    mundpay_url: mundpayUrl || null,
+                };
+                if (imagem_url) camposParaAtualizar.imagem_url = imagem_url;
+                if (pdf_storage_key) camposParaAtualizar.pdf_storage_key = pdf_storage_key;
 
-            const checkoutLink = getCheckoutUrl(novoProduto.checkout_slug);
+                produtoSalvo = await apiAtualizarProduto(editingProduct.id, camposParaAtualizar);
+                setProducts(prev => prev.map(p => p.id === produtoSalvo.id ? produtoSalvo : p));
+                toast.success("Produto atualizado com sucesso!");
 
-            if (checkoutLink) {
-                navigator.clipboard.writeText(checkoutLink);
-                toast.success("Produto criado! Link de checkout copiado ✅");
             } else {
-                toast.success("Produto criado com sucesso!");
+                // Create new product
+                // Sincronizar com Stripe (opcional — não bloqueia se falhar)
+                const stripeData = await criarProdutoNoStripe(nome, parseFloat(preco), descricao);
+
+                // Criar produto via API serverless (bypass de RLS com service_role)
+                produtoSalvo = await apiCriarProduto({
+                    nome,
+                    preco: parseFloat(preco),
+                    descricao,
+                    ativo,
+                    imagem_url,
+                    pdf_storage_key,
+                    stripe_product_id: stripeData?.stripe_product_id || null,
+                    stripe_price_id: stripeData?.stripe_price_id || null,
+                    mundpay_url: mundpayUrl || null,
+                });
+
+                const checkoutLink = getCheckoutUrl(produtoSalvo.checkout_slug);
+
+                if (checkoutLink) {
+                    navigator.clipboard.writeText(checkoutLink);
+                    toast.success("Produto criado! Link de checkout copiado ✅");
+                } else {
+                    toast.success("Produto criado com sucesso!");
+                }
+                setProducts(prev => [produtoSalvo, ...prev]);
             }
 
-            setProducts(prev => [novoProduto, ...prev]);
             resetForm();
         } catch (err: any) {
             console.error("Erro ao salvar produto:", err);
@@ -300,13 +337,15 @@ export default function AdminProducts() {
     }
 
     function resetForm() {
+        setIsAdding(false);
+        setEditingProduct(null);
         setNome("");
         setPreco("");
         setDescricao("");
+        setMundpayUrl("");
         setAtivo(true);
         setImageFile(null);
         setPdfFile(null);
-        setIsAdding(false);
     }
 
     async function handleDelete(id: string) {
@@ -346,12 +385,19 @@ export default function AdminProducts() {
                     </Button>
                 )}
             </div>
-
             {isAdding && (
-                <Card className="border-primary/20 shadow-lg">
-                    <CardHeader>
-                        <CardTitle>Configuração do Produto</CardTitle>
-                        <CardDescription>Preencha os dados e faça o upload do PDF.</CardDescription>
+                <Card className="border-primary/30 shadow-2xl animate-in zoom-in-95 duration-300">
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-xl flex items-center gap-2">
+                                    {editingProduct ? <Pencil className="size-5 text-primary" /> : <Plus className="size-5 text-primary" />}
+                                    {editingProduct ? `Editando: ${editingProduct.nome}` : "Novo Produto Digital"}
+                                </CardTitle>
+                                <CardDescription>Preencha os dados e configure como deseja receber os pagamentos.</CardDescription>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={resetForm}><X className="size-5 opacity-50" /></Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -387,16 +433,72 @@ export default function AdminProducts() {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 pt-2">
-                            <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
-                            <Label htmlFor="ativo">Produto ativo e disponível para venda</Label>
+                        <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border">
+                            <Label className="text-sm font-semibold flex items-center gap-2">
+                                <CreditCard className="size-4 text-primary" />
+                                Gateway de Pagamento Disponível
+                            </Label>
+
+                            <div className="grid gap-3">
+                                <div className={`p-4 rounded-lg border transition-all ${mundpayUrl ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-8 w-8 rounded bg-black flex items-center justify-center text-[10px] text-white font-bold">MP</div>
+                                            <div>
+                                                <p className="text-sm font-medium">MundPay (Pix Automatizado)</p>
+                                                <p className="text-[11px] text-muted-foreground">Usar link do checkout externo para gerar Pix via robô.</p>
+                                            </div>
+                                        </div>
+                                        <Switch
+                                            checked={!!mundpayUrl}
+                                            onCheckedChange={(checked) => setMundpayUrl(checked ? "PREENCHA_O_LINK_AQUI" : "")}
+                                        />
+                                    </div>
+
+                                    {!!mundpayUrl && (
+                                        <div className="mt-4 pt-4 border-t border-primary/10 space-y-2 animate-in fade-in slide-in-from-top-2">
+                                            <div className="flex items-center gap-2">
+                                                <Link className="size-3.5 text-primary" />
+                                                <Label htmlFor="mundpay" className="text-xs font-semibold text-primary">Link de checkout MundPay</Label>
+                                            </div>
+                                            <Input
+                                                id="mundpay"
+                                                value={mundpayUrl === "PREENCHA_O_LINK_AQUI" ? "" : mundpayUrl}
+                                                onChange={e => setMundpayUrl(e.target.value)}
+                                                placeholder="https://pay.mycheckoutt.com/..."
+                                                className="bg-background h-9 text-sm"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="p-4 rounded-lg border bg-muted/20 border-border/50 opacity-60">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-8 w-8 rounded bg-[#635BFF] flex items-center justify-center text-[10px] text-white font-bold">S</div>
+                                            <div>
+                                                <p className="text-sm font-medium">Stripe (Cartão de Crédito)</p>
+                                                <p className="text-[11px] text-muted-foreground">Processamento direto no SharkPay.</p>
+                                            </div>
+                                        </div>
+                                        <Switch checked={true} disabled />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex justify-end gap-2 pt-4">
+                        <div className="flex items-center gap-4 pt-2">
+                            <div className="flex items-center gap-2">
+                                <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
+                                <Label htmlFor="ativo">Produto ativo</Label>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4 border-t">
                             <Button variant="outline" onClick={resetForm} disabled={isSaving}>Cancelar</Button>
-                            <Button onClick={handleSave} disabled={isSaving} className="gap-2 min-w-[120px]">
+                            <Button onClick={handleSave} disabled={isSaving} className="gap-2 min-w-[140px] font-semibold">
                                 {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                                Salvar Produto
+                                {editingProduct ? "Salvar Alterações" : "Criar Produto"}
                             </Button>
                         </div>
                     </CardContent>
@@ -427,10 +529,10 @@ export default function AdminProducts() {
                                 <CardContent className="p-5">
                                     <div className="flex flex-col md:flex-row md:items-center gap-4">
                                         {/* Info do Produto */}
-                                        <div className="flex-1 min-w-0">
+                                        <div className="flex-1 min-w-0 flex items-center gap-3">
                                             <div className={`p-0 rounded-lg overflow-hidden size-12 flex-shrink-0 border border-border ${product.ativo ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
                                                 {product.imagem_url ? (
-                                                    <img src={product.imagem_url} alt={product.nome} className="size-full object-cover" />
+                                                    <img src={normalizeImageUrl(product.imagem_url) || ""} alt={product.nome} className="size-full object-cover" />
                                                 ) : (
                                                     <div className="size-full flex items-center justify-center">
                                                         <Package className="size-5" />
@@ -450,29 +552,36 @@ export default function AdminProducts() {
                                             R$ {product.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                         </div>
 
-                                        {/* Ações */}
                                         <div className="flex items-center gap-2 shrink-0">
+                                            {/* O LAPIZINHO DE EDIÇÃO PEDIDO */}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-2 h-9 px-3 border-primary/30 hover:bg-primary/10 text-primary font-medium transition-all"
+                                                onClick={() => startEdit(product)}
+                                            >
+                                                <Pencil className="size-4" />
+                                                <span>Editar</span>
+                                            </Button>
+
                                             <Button
                                                 variant={isCopied ? "outline" : "default"}
                                                 size="sm"
-                                                className="gap-2 transition-all"
+                                                className="gap-2 h-9 px-3 transition-all"
                                                 onClick={() => copyCheckoutLink(product)}
                                                 disabled={!checkoutUrl}
                                             >
                                                 {isCopied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
-                                                {isCopied ? "Copiado!" : "Copiar Link"}
+                                                {isCopied ? "Copiado" : "Link"}
                                             </Button>
+
                                             <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="gap-2"
-                                                onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
-                                                disabled={!checkoutUrl}
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleDelete(product.id)}
+                                                className="text-destructive h-9 w-9 hover:bg-destructive/10"
+                                                title="Excluir Produto"
                                             >
-                                                <ExternalLink className="size-4" />
-                                                Abrir
-                                            </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} className="text-destructive h-8 w-8">
                                                 <Trash2 className="size-4" />
                                             </Button>
                                         </div>

@@ -443,6 +443,126 @@ async function testarIntegracoesAdmin(): Promise<IntegracaoStatus[]> {
 // DIAGNÓSTICO COMPLETO
 // ========================================================================
 
+// ========================================================================
+// DIAGNÓSTICO REAL DE PEDIDOS NO SUPABASE
+// ========================================================================
+
+/**
+ * Analisa pedidos recentes e detecta padrões de falha nos gateways
+ */
+async function testarPedidosSupabase(): Promise<DiagnosticoResultado> {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    if (!url || url.includes('placeholder')) {
+        return { status: 'warning', mensagem: 'Supabase não configurado — impossível analisar pedidos', sugestoes: [] };
+    }
+
+    try {
+        const umDiaAtras = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const umaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+        const { data: pedidos, error } = await supabase
+            .from('pedidos')
+            .select('status, gateway, erro, criado_em')
+            .gte('criado_em', umDiaAtras)
+            .order('criado_em', { ascending: false })
+            .limit(100);
+
+        if (error) {
+            return {
+                status: 'warning',
+                mensagem: `Não foi possível consultar pedidos: ${error.message}`,
+                sugestoes: ['Verifique as políticas RLS da tabela pedidos', 'Execute: GRANT SELECT ON pedidos TO anon;']
+            };
+        }
+
+        if (!pedidos || pedidos.length === 0) {
+            return {
+                status: 'ok',
+                mensagem: 'Nenhum pedido nas últimas 24h',
+                sugestoes: []
+            };
+        }
+
+        const total = pedidos.length;
+        const pagos = pedidos.filter(p => p.status === 'pago').length;
+        const falhos = pedidos.filter(p => p.status === 'falhou').length;
+        const pendentesAntigos = pedidos.filter(p =>
+            p.status === 'pendente' && p.criado_em < umaHoraAtras
+        ).length;
+        const bloqueados = pedidos.filter(p => p.status === 'bloqueado_fraude').length;
+
+        const taxaSucesso = total > 0 ? Math.round((pagos / total) * 100) : 0;
+
+        const sugestoes: string[] = [];
+        if (falhos > 0) sugestoes.push(`${falhos} pedido(s) com falha — verifique logs do gateway nas últimas 24h`);
+        if (pendentesAntigos > 0) sugestoes.push(`${pendentesAntigos} pedido(s) pendentes há mais de 1h — possível falha de webhook`);
+        if (bloqueados > 0) sugestoes.push(`${bloqueados} transação(ões) bloqueadas por reCAPTCHA`);
+        if (taxaSucesso < 60 && total >= 5) sugestoes.push(`Taxa de sucesso baixa (${taxaSucesso}%) — verifique configuração dos gateways`);
+
+        return {
+            status: falhos > total * 0.3 ? 'error' : pendentesAntigos > 0 ? 'warning' : 'ok',
+            mensagem: `${total} pedidos nas últimas 24h | ${pagos} pagos | ${falhos} falhos | taxa de sucesso: ${taxaSucesso}%`,
+            sugestoes
+        };
+    } catch (e: any) {
+        return {
+            status: 'warning',
+            mensagem: `Erro ao consultar pedidos: ${e.message}`,
+            sugestoes: ['Verifique a conexão com o Supabase']
+        };
+    }
+}
+
+/**
+ * Health check dos webhooks do N8N — chamado diariamente
+ */
+export async function healthCheckWebhooks(): Promise<{ n8n: string; pushinpay: string; stripe: string }> {
+    const result = { n8n: 'não testado', pushinpay: 'não testado', stripe: 'não testado' };
+
+    const n8nUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
+    if (n8nUrl && !n8nUrl.includes('seudominio')) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const r = await fetch(n8nUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event: 'health_check', timestamp: new Date().toISOString() }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            result.n8n = r.ok ? '✅ online' : `⚠️ respondeu ${r.status}`;
+        } catch (e: any) {
+            result.n8n = e.name === 'AbortError' ? '⚠️ timeout (>4s)' : `❌ offline: ${e.message}`;
+        }
+    } else {
+        result.n8n = '⚠️ URL não configurada';
+    }
+
+    const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
+    // Testar webhook PushinPay (apenas verifica se a rota está acessível)
+    try {
+        const r = await fetch(`${appUrl}/api/pushinpay/webhook`, { method: 'GET' });
+        result.pushinpay = r.status === 405 ? '✅ online' : `⚠️ status ${r.status}`;
+    } catch {
+        result.pushinpay = '❌ inacessível';
+    }
+
+    // Testar webhook Stripe
+    try {
+        const r = await fetch(`${appUrl}/api/stripe/webhook`, { method: 'GET' });
+        result.stripe = r.status === 405 ? '✅ online' : `⚠️ status ${r.status}`;
+    } catch {
+        result.stripe = '❌ inacessível';
+    }
+
+    return result;
+}
+
+// ========================================================================
+// DIAGNÓSTICO COMPLETO
+// ========================================================================
+
 /**
  * Executa diagnóstico COMPLETO de todas as integrações
  */
@@ -451,85 +571,41 @@ export async function diagnosticarIntegracoes(): Promise<IntegracaoStatus[]> {
 
     // 1. Supabase
     const supabaseResult = await testarSupabase();
-    resultados.push({
-        nome: "Supabase",
-        tipo: "database",
-        icone: "🗄️",
-        ativo: supabaseResult.status === "ok",
-        diagnostico: supabaseResult,
-    });
+    resultados.push({ nome: 'Supabase', tipo: 'database', icone: '🗄️', ativo: supabaseResult.status === 'ok', diagnostico: supabaseResult });
 
-    // 2. Stripe (env vars)
+    // 2. Stripe
     const stripeResult = testarStripe();
-    resultados.push({
-        nome: "Stripe",
-        tipo: "payment",
-        icone: "💳",
-        ativo: stripeResult.status === "ok",
-        diagnostico: stripeResult,
-    });
+    resultados.push({ nome: 'Stripe', tipo: 'payment', icone: '💳', ativo: stripeResult.status === 'ok', diagnostico: stripeResult });
 
-    // 3. PushinPay (env vars)
+    // 3. PushinPay
     const pushinResult = testarPushinPay();
-    resultados.push({
-        nome: "PushinPay (PIX)",
-        tipo: "payment",
-        icone: "📲",
-        ativo: pushinResult.status === "ok",
-        diagnostico: pushinResult,
-    });
+    resultados.push({ nome: 'PushinPay (PIX)', tipo: 'payment', icone: '📲', ativo: pushinResult.status === 'ok', diagnostico: pushinResult });
 
     // 4. N8N
     const n8nResult = await testarN8N();
-    resultados.push({
-        nome: "N8N (Automações)",
-        tipo: "automation",
-        icone: "⚡",
-        ativo: n8nResult.status === "ok",
-        diagnostico: n8nResult,
-    });
+    resultados.push({ nome: 'N8N (Automações)', tipo: 'automation', icone: '⚡', ativo: n8nResult.status === 'ok', diagnostico: n8nResult });
 
     // 5. UTMify
     const utmifyResult = await testarUTMify();
-    resultados.push({
-        nome: "UTMify (Tracking)",
-        tipo: "tracking",
-        icone: "🔗",
-        ativo: utmifyResult.status === "ok",
-        diagnostico: utmifyResult,
-    });
+    resultados.push({ nome: 'UTMify (Tracking)', tipo: 'tracking', icone: '🔗', ativo: utmifyResult.status === 'ok', diagnostico: utmifyResult });
 
     // 6. OpenRouter
     const openrouterResult = testarOpenRouter();
-    resultados.push({
-        nome: "OpenRouter (LLM)",
-        tipo: "ai",
-        icone: "🤖",
-        ativo: openrouterResult.status === "ok",
-        diagnostico: openrouterResult,
-    });
+    resultados.push({ nome: 'OpenRouter (LLM)', tipo: 'ai', icone: '🤖', ativo: openrouterResult.status === 'ok', diagnostico: openrouterResult });
 
     // 7. Vercel/Deploy
     const vercelResult = testarVercel();
-    resultados.push({
-        nome: "Vercel (Deploy)",
-        tipo: "deploy",
-        icone: "🚀",
-        ativo: vercelResult.status === "ok",
-        diagnostico: vercelResult,
-    });
+    resultados.push({ nome: 'Vercel (Deploy)', tipo: 'deploy', icone: '🚀', ativo: vercelResult.status === 'ok', diagnostico: vercelResult });
 
-    // 8. Mundipagg (env vars)
+    // 8. Mundipagg
     const mundipaggResult = testarMundipagg();
-    resultados.push({
-        nome: "Mundipagg",
-        tipo: "payment",
-        icone: "🌐",
-        ativo: mundipaggResult.status === "ok",
-        diagnostico: mundipaggResult,
-    });
+    resultados.push({ nome: 'MundPay/Mundipagg', tipo: 'payment', icone: '🌐', ativo: mundipaggResult.status === 'ok', diagnostico: mundipaggResult });
 
-    // 9. Integrações configuradas no admin
+    // 9. Análise real de pedidos no Supabase
+    const pedidosResult = await testarPedidosSupabase();
+    resultados.push({ nome: 'Análise de Pedidos (24h)', tipo: 'database', icone: '📊', ativo: pedidosResult.status === 'ok', diagnostico: pedidosResult });
+
+    // 10. Integrações configuradas no admin
     const adminConfigs = await testarIntegracoesAdmin();
     resultados.push(...adminConfigs);
 

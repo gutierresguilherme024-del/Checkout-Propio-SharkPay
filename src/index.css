@@ -892,8 +892,8 @@ All colors MUST be HSL.
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: hsl(var(--foreground) / 0.45);
-  backdrop-filter: blur(6px);
+  background: hsl(var(--background) / 0.98);
+  backdrop-filter: blur(8px);
   animation: pix-fade .2s ease;
 }
 

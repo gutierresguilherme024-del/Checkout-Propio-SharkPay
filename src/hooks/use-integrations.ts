@@ -33,13 +33,15 @@ export function useIntegrations() {
         }
         if (id === 'pushinpay') {
             const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
-            const hasKey = (item.config.apiToken && !String(item.config.apiToken).includes('placeholder')) || (envKey && !envKey.includes('placeholder'));
-            // Permitir 'active' se habilitado e tiver qualquer coisa, mas marcar como pending se for placeholder
-            return (item.config.apiToken || envKey) ? "active" : "pending";
+            const configKey = item.config.apiToken as string | undefined;
+            const isRealToken = (k: string | undefined) =>
+                !!k && k.length > 10 && !k.includes('placeholder') && !k.includes('pp_live_placeholder');
+            return (isRealToken(envKey) || isRealToken(configKey)) ? "active" : "pending";
         }
         if (id === 'mundpay') {
-            const envToken = import.meta.env.VITE_MUNDPAY_API_TOKEN;
-            return (item.config.apiToken || envToken) ? "active" : "pending";
+            // MundPay funciona por URL de redirect configurada no produto,
+            // não precisa de token de API. Se está habilitado, está ativo.
+            return "active";
         }
 
         return "active";

@@ -47,9 +47,15 @@ export const integrationService = {
         const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
         const targetUrl = webhook?.config?.url || n8nWebhookUrl;
 
-        console.log(`Enviando evento para n8n: ${payload.event || 'generic'}`);
+        if (!targetUrl || targetUrl.includes('placeholder') || targetUrl.includes('seudominio')) {
+            console.warn('[n8n] Webhook não configurado, ignorando envio.');
+            return false;
+        }
 
         try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+
             const response = await fetch(targetUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -57,12 +63,51 @@ export const integrationService = {
                     ...payload,
                     timestamp: new Date().toISOString(),
                     source: 'sharkpay_checkout'
-                })
+                }),
+                signal: controller.signal
             });
+            clearTimeout(timeout);
             return response.ok;
         } catch (e) {
-            console.error("Erro ao enviar para n8n:", e);
+            console.warn("[n8n] Webhook indisponível (não bloqueia o fluxo):", (e as Error).message);
             return false;
+        }
+    },
+
+    async getGlobalSettings(): Promise<any | null> {
+        const { data, error } = await supabase
+            .from('integrations')
+            .select('config')
+            .eq('id', 'checkout_global')
+            .single();
+
+        if (error) {
+            if (error.code !== 'PGRST116') { // Ignorar error de item não encontrado
+                console.warn("Erro ao buscar configurações globais:", error);
+            }
+            const local = localStorage.getItem('sco_global_settings');
+            return local ? JSON.parse(local) : null;
+        }
+        return data?.config || null;
+    },
+
+    async saveGlobalSettings(config: any): Promise<void> {
+        const { error } = await supabase
+            .from('integrations')
+            .upsert({
+                id: 'checkout_global',
+                type: 'settings',
+                name: 'Configurações de Layout',
+                enabled: true,
+                config,
+                updated_at: new Date().toISOString()
+            } as any);
+
+        if (error) {
+            console.warn("Erro ao salvar configurações no Supabase, salvando local:", error);
+            localStorage.setItem('sco_global_settings', JSON.stringify(config));
+        } else {
+            localStorage.setItem('sco_global_settings', JSON.stringify(config));
         }
     }
 };

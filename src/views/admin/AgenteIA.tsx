@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgenteLLM } from "@/hooks/useAgenteLLM";
+import { healthCheckWebhooks } from "@/lib/agente-integracoes";
 import {
     Bot,
     Search,
@@ -41,6 +42,7 @@ export default function AgenteIA() {
         Array<{ role: 'user' | 'assistant'; content: string; timestamp: string; isDiagnostic?: boolean }>
     >([]);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [isChecking, setIsChecking] = useState(false);
 
     useEffect(() => {
         verificarDisponibilidade();
@@ -102,6 +104,28 @@ export default function AgenteIA() {
                 { role: 'assistant', content: res, timestamp: new Date().toLocaleTimeString("pt-BR") }
             ]);
             toast.success("Relatório de saúde gerado!");
+        }
+    };
+
+    const handleHealthCheckWebhooks = async () => {
+        setIsChecking(true);
+        toast.info("Testando endpoints de webhook...");
+        try {
+            const resultado = await healthCheckWebhooks();
+            const mensagem = `🔍 Health Check dos Webhooks:\n\n` +
+                `• N8N: ${resultado.n8n}\n` +
+                `• PushinPay: ${resultado.pushinpay}\n` +
+                `• Stripe: ${resultado.stripe}`;
+
+            setHistoricoRespostas(prev => [
+                ...prev,
+                { role: 'assistant', content: mensagem, timestamp: new Date().toLocaleTimeString("pt-BR") }
+            ]);
+            toast.success("Health Check concluído!");
+        } catch (e: any) {
+            toast.error("Erro no health check: " + e.message);
+        } finally {
+            setIsChecking(false);
         }
     };
 
@@ -176,6 +200,15 @@ export default function AgenteIA() {
                                         <FileText className="size-4 text-primary group-hover:scale-110 transition-transform" />
                                         Gerar Relatório de Saúde
                                     </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-start gap-3 h-auto py-3 px-4 border-emerald-500/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 text-xs text-foreground group"
+                                        onClick={handleHealthCheckWebhooks}
+                                        disabled={isChecking}
+                                    >
+                                        <Zap className="size-4 text-emerald-500 group-hover:scale-110 transition-transform" />
+                                        {isChecking ? 'Checando...' : 'Health Check Webhooks'}
+                                    </Button>
                                 </div>
                                 <div className="space-y-3">
                                     <p className="text-center">Dúvidas Frequentes</p>
@@ -208,15 +241,15 @@ export default function AgenteIA() {
                             >
                                 <div className={`flex items-start gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                                     <div className={`mt-1 size-8 rounded-lg flex items-center justify-center border shrink-0 ${msg.role === 'user'
-                                            ? 'bg-primary/10 border-primary/20 text-primary'
-                                            : 'bg-slate-800 border-slate-700 text-slate-300'
+                                        ? 'bg-primary/10 border-primary/20 text-primary'
+                                        : 'bg-slate-800 border-slate-700 text-slate-300'
                                         }`}>
                                         {msg.role === 'user' ? <Terminal className="size-4" /> : <Bot className="size-4" />}
                                     </div>
                                     <div className={`space-y-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                         <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user'
-                                                ? 'bg-primary text-primary-foreground rounded-tr-none'
-                                                : 'bg-slate-900/80 border border-slate-800 rounded-tl-none text-slate-200'
+                                            ? 'bg-primary text-primary-foreground rounded-tr-none'
+                                            : 'bg-slate-900/80 border border-slate-800 rounded-tl-none text-slate-200'
                                             }`}>
                                             {msg.isDiagnostic ? (
                                                 <div className="space-y-4">
@@ -242,7 +275,7 @@ export default function AgenteIA() {
                                                                             <XCircle className="size-3 text-red-500" />
                                                                         )}
                                                                         <span className={`text-[10px] font-bold ${d.diagnostico.status === 'ok' ? 'text-emerald-500' :
-                                                                                d.diagnostico.status === 'warning' ? 'text-amber-500' : 'text-red-500'
+                                                                            d.diagnostico.status === 'warning' ? 'text-amber-500' : 'text-red-500'
                                                                             }`}>
                                                                             {d.diagnostico.status.toUpperCase()}
                                                                         </span>

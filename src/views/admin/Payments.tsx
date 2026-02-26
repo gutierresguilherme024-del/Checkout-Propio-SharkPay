@@ -77,7 +77,7 @@ const PAYMENT_INTEGRATIONS = [
   {
     id: "mundpay",
     name: "MundPay",
-    description: "Gateway global para produtos digitais e assinaturas.",
+    description: "Automação inteligente de Pix via scraping no checkout oficial MundPay.",
     icon: (
       <svg viewBox="0 0 40 40" fill="none" className="h-full w-full">
         <rect width="40" height="40" rx="10" fill="#000" />
@@ -96,7 +96,6 @@ const PAYMENT_INTEGRATIONS = [
       </svg>
     ),
     fields: [
-      { key: "apiToken", label: "Bearer Token", placeholder: "mund_...", secret: true },
       { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_...", secret: true },
     ],
   },
@@ -157,7 +156,6 @@ export default function AdminPayments() {
       // MundPay (Fallback configurado no Agente)
       if (!values.mundpay) {
         values.mundpay = {
-          apiToken: "",
           webhookSecret: ""
         };
       }

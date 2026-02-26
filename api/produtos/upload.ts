@@ -20,6 +20,13 @@ export default async function handler(req: any, res: any) {
             return res.status(400).json({ error: 'base64, mimeType e fileName são obrigatórios' })
         }
 
+        const isImage = mimeType.startsWith('image/')
+        const isPdf = mimeType === 'application/pdf'
+
+        if (!isImage && !isPdf) {
+            return res.status(400).json({ error: 'Tipo de arquivo não suportado. Apenas imagens e PDFs são permitidos.' })
+        }
+
         // Converter base64 para Buffer
         const base64Data = base64.replace(/^data:[^;]+;base64,/, '')
         const buffer = Buffer.from(base64Data, 'base64')
@@ -27,25 +34,44 @@ export default async function handler(req: any, res: any) {
         const ext = fileName.split('.').pop() || 'bin'
         const uniqueFileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
 
+        // Usar sempre 'produtos-pdf' como bucket principal (único garantido no setup)
+        const bucket = 'produtos-pdf'
+
         const { data, error } = await supabase.storage
-            .from('produtos-pdf')
+            .from(bucket)
             .upload(uniqueFileName, buffer, {
                 contentType: mimeType,
                 upsert: true
             })
 
-        if (error) throw error
+        if (error) {
+            console.error(`[Upload] Erro no bucket '${bucket}':`, error.message)
+            throw error
+        }
 
+        const usedBucket = bucket
+        const uploadResult = data
+
+        if (!uploadResult) {
+            throw new Error('Falha ao enviar arquivo para todos os buckets disponíveis.')
+        }
+
+        // Gerar URL pública completa
         const { data: urlData } = supabase.storage
-            .from('produtos-pdf')
-            .getPublicUrl(data.path)
+            .from(usedBucket)
+            .getPublicUrl(uploadResult.path)
+
+        const publicUrl = urlData.publicUrl
+
+        console.log(`[Upload] URL pública: ${publicUrl}`)
 
         return res.status(200).json({
-            path: data.path,
-            url: urlData.publicUrl
+            path: uploadResult.path,
+            url: publicUrl,
+            bucket: usedBucket
         })
     } catch (error: any) {
-        console.error('Erro no upload:', error)
+        console.error('[Upload] Erro:', error)
         return res.status(500).json({ error: error.message || 'Erro ao fazer upload' })
     }
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { CheckoutShell } from "@/components/checkout/CheckoutShell";
 import { defaultCheckoutSettings, type CheckoutSettings } from "@/components/checkout/types";
+import { integrationService } from "@/lib/integrations";
+import { toast } from "sonner";
+import { Loader2, Save } from "lucide-react";
 
 export default function AdminEditor() {
   const [s, setS] = useState<CheckoutSettings>(defaultCheckoutSettings);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const saved = await integrationService.getGlobalSettings();
+        if (saved) setS({ ...defaultCheckoutSettings, ...saved });
+      } catch (e) {
+        console.error("Erro ao carregar settings:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    const tid = toast.loading("Salvando edições...");
+    try {
+      await integrationService.saveGlobalSettings(s);
+      toast.success("Edições salvas e aplicadas em todos os checkouts!", { id: tid });
+    } catch (e) {
+      toast.error("Erro ao salvar.", { id: tid });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const hue = s.primaryHue;
   const huePreview = useMemo(
@@ -18,12 +50,20 @@ export default function AdminEditor() {
     [hue],
   );
 
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
       <div className="space-y-4">
         <header>
           <h1 className="font-display text-2xl">Editor de Checkout</h1>
-          <p className="text-sm text-muted-foreground">Personalização visual com preview em tempo real (local)</p>
+          <p className="text-sm text-muted-foreground">Personalização visual aplicada a todos os checkouts.</p>
         </header>
 
         <Card className="p-4">
@@ -45,6 +85,7 @@ export default function AdminEditor() {
               <Slider value={[s.primaryHue]} min={0} max={360} step={1} onValueChange={([v]) => setS((p) => ({ ...p, primaryHue: v }))} />
             </div>
 
+            {/* Temporizador */}
             <div className="rounded-xl border bg-background/60 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -70,6 +111,7 @@ export default function AdminEditor() {
               <Input value={s.urgencyBarText} onChange={(e) => setS((p) => ({ ...p, urgencyBarText: e.target.value }))} />
             </div>
 
+            {/* Prova Social */}
             <div className="rounded-xl border bg-background/60 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -84,6 +126,7 @@ export default function AdminEditor() {
               </div>
             </div>
 
+            {/* Mensagem Flutuante */}
             <div className="rounded-xl border bg-background/60 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -107,8 +150,13 @@ export default function AdminEditor() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button variant="hero" onClick={() => setS(defaultCheckoutSettings)}>Resetar</Button>
-              <Button variant="soft" onClick={() => navigator.clipboard?.writeText(JSON.stringify(s, null, 2))}>Copiar JSON</Button>
+              <Button asChild variant="outline" onClick={() => setS(defaultCheckoutSettings)} className="flex-1">
+                <span>Resetar Padrão</span>
+              </Button>
+              <Button variant="hero" onClick={handleSave} disabled={isSaving} className="flex-1 gap-2">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar Edições
+              </Button>
             </div>
           </div>
         </Card>

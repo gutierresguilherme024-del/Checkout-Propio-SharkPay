@@ -50,8 +50,8 @@ export default async function handler(req: any, res: any) {
             return res.status(200).json({ produtos: data || [] })
 
         } else if (req.method === 'POST') {
-            const { nome, preco, descricao, ativo, imagem_url, pdf_storage_key, stripe_product_id, stripe_price_id } = req.body
-            console.log('[API Produtos] Criando produto:', { nome, preco });
+            const { nome, preco, descricao, ativo, imagem_url, pdf_storage_key, stripe_product_id, stripe_price_id, mundpay_url } = req.body
+            console.log('[API Produtos] Criando produto:', { nome, preco, mundpay_url });
 
             if (!nome || preco === undefined) {
                 return res.status(400).json({ error: 'Nome e preço são obrigatórios' })
@@ -71,6 +71,7 @@ export default async function handler(req: any, res: any) {
                     stripe_product_id: stripe_product_id || null,
                     stripe_price_id: stripe_price_id || null,
                     checkout_slug,
+                    mundpay_url: mundpay_url || null,
                     atualizado_em: new Date().toISOString()
                 }])
                 .select()

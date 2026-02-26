@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
 const supabase = createClient(
-    process.env.VITE_SUPABASE_URL || '',
+    process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
 )
 
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Notificar N8N também (opcional, mas recomendado pelo usuário)
-        const n8nUrl = process.env.VITE_N8N_WEBHOOK_URL;
+        const n8nUrl = process.env.N8N_WEBHOOK_URL || process.env.VITE_N8N_WEBHOOK_URL;
         if (n8nUrl && !n8nUrl.includes('seudominio')) {
             fetch(n8nUrl, {
                 method: 'POST',

@@ -10,19 +10,32 @@ import { Loader2, RefreshCcw, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-type OrderStatus = "pendente" | "pago" | "falhou";
+type OrderStatus = "pendente" | "pago" | "falhou" | "bloqueado_fraude" | "cancelado";
 
 type Order = {
   id: string;
-  email: string;
-  nome: string;
-  metodo: "pix" | "cartao";
+  // Campos reais do Supabase
+  email_comprador?: string;
+  nome_comprador?: string;
+  metodo_pagamento?: string;
+  // Aliases legados
+  email?: string;
+  nome?: string;
+  metodo?: string;
   valor: number;
   status: OrderStatus;
-  criado_em: string;
+  created_at?: string;
+  criado_em?: string;
   pago_em?: string;
   utm_source?: string;
+  gateway?: string;
 };
+
+// Helpers para acessar dados com fallback
+function getEmail(o: Order) { return o.email_comprador || o.email || ''; }
+function getNome(o: Order) { return o.nome_comprador || o.nome || 'Cliente'; }
+function getMetodo(o: Order) { return (o.metodo_pagamento || o.metodo || 'desconhecido') as string; }
+function getCreatedAt(o: Order) { return o.created_at || o.criado_em || new Date().toISOString(); }
 
 function money(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -72,9 +85,15 @@ export default function AdminOverview() {
 
   const filteredOrders = useMemo(() => {
     return realOrders.filter((o) => {
-      if (methodFilter !== "all" && o.metodo !== methodFilter) return false;
+      const metodoVal = getMetodo(o);
+      const isPix = metodoVal === 'pix' || metodoVal.includes('pix');
+      const isCartao = metodoVal === 'card' || metodoVal === 'cartao' || metodoVal.includes('card');
+      if (methodFilter === 'pix' && !isPix) return false;
+      if (methodFilter === 'cartao' && !isCartao) return false;
       if (statusFilter !== "all" && o.status !== statusFilter) return false;
-      if (query && !o.email.toLowerCase().includes(query.toLowerCase()) && !o.nome.toLowerCase().includes(query.toLowerCase())) return false;
+      const emailVal = getEmail(o).toLowerCase();
+      const nomeVal = getNome(o).toLowerCase();
+      if (query && !emailVal.includes(query.toLowerCase()) && !nomeVal.includes(query.toLowerCase())) return false;
       return true;
     });
   }, [realOrders, methodFilter, statusFilter, query]);
@@ -97,8 +116,8 @@ export default function AdminOverview() {
       .filter(o => o.pago_em && new Date(o.pago_em) >= inicioMes)
       .reduce((acc, o) => acc + Number(o.valor), 0);
 
-    const pixCount = pagos.filter(o => o.metodo === 'pix').length;
-    const cartaoCount = pagos.filter(o => o.metodo === 'cartao').length;
+    const pixCount = pagos.filter(o => getMetodo(o) === 'pix').length;
+    const cartaoCount = pagos.filter(o => ['card', 'cartao'].includes(getMetodo(o))).length;
 
     return {
       receitaHoje,
@@ -268,17 +287,17 @@ export default function AdminOverview() {
                         <TableRow key={o.id} className="border-white/5 hover:bg-white/5">
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-medium text-foreground">{o.nome || 'Cliente'}</span>
-                              <span className="text-xs text-muted-foreground">{o.email}</span>
+                              <span className="font-medium text-foreground">{getNome(o)}</span>
+                              <span className="text-xs text-muted-foreground">{getEmail(o)}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="capitalize">{o.metodo}</TableCell>
+                          <TableCell className="capitalize">{getMetodo(o)}</TableCell>
                           <TableCell className="font-medium">{money(o.valor)}</TableCell>
                           <TableCell>
                             <StatusPill status={o.status} />
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
-                            {new Date(o.criado_em).toLocaleString('pt-BR')}
+                            {new Date(getCreatedAt(o)).toLocaleString('pt-BR')}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -323,10 +342,12 @@ function MiniStat({ title, value, color }: { title: string; value: string, color
 }
 
 function StatusPill({ status }: { status: OrderStatus }) {
-  const map: Record<OrderStatus, { label: string; cls: string }> = {
+  const map: Record<string, { label: string; cls: string }> = {
     pago: { label: "Aprovado", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
     pendente: { label: "Pendente", cls: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
     falhou: { label: "Falhou", cls: "bg-rose-500/20 text-rose-400 border-rose-500/30" },
+    bloqueado_fraude: { label: "Fraude", cls: "bg-red-800/20 text-red-400 border-red-800/30" },
+    cancelado: { label: "Cancelado", cls: "bg-slate-500/20 text-slate-400 border-slate-500/30" },
   };
 
   const v = map[status] || { label: status, cls: "bg-slate-500/20 text-slate-400" };
