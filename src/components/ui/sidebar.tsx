@@ -158,7 +158,7 @@ const Sidebar = React.forwardRef<
         <SheetContent
           data-sidebar="sidebar"
           data-mobile="true"
-          className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -174,12 +174,12 @@ const Sidebar = React.forwardRef<
 
   return (
     <div
-      ref={ref}
       className="group peer hidden text-sidebar-foreground md:block"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
       data-side={side}
+      {...props}
     >
       {/* This is what handles the sidebar gap on desktop */}
       <div
@@ -193,6 +193,7 @@ const Sidebar = React.forwardRef<
         )}
       />
       <div
+        ref={ref}
         className={cn(
           "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
           side === "left"
@@ -204,7 +205,6 @@ const Sidebar = React.forwardRef<
             : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className,
         )}
-        {...props}
       >
         <div
           data-sidebar="sidebar"

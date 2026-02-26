@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Trash2, Pencil, Save, X, Search, Package, Eye, Power, FileText, Check, Copy, ImageIcon, Loader2, Link, ExternalLink, CreditCard, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, Save, X, Search, Package, Eye, Power, FileText, Check, Copy, ImageIcon, Loader2, Link, ExternalLink, CreditCard, ChevronRight, Zap } from "lucide-react";
 import { normalizeImageUrl } from "@/lib/utils";
 import { toast } from "sonner";
+import { useIntegrations } from "@/hooks/use-integrations";
 
 interface Product {
     id: string;
@@ -201,6 +202,7 @@ function gerarSlugLocal(nome: string): string {
 }
 
 export default function AdminProducts() {
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -213,11 +215,19 @@ export default function AdminProducts() {
     const [ativo, setAtivo] = useState(true);
     const [mundpayUrl, setMundpayUrl] = useState("");
     const [stripeEnabled, setStripeEnabled] = useState(true);
-    const [pushinpayEnabled, setPushinpayEnabled] = useState(true);
-    const [mundpayEnabled, setMundpayEnabled] = useState(false);
+    // pixGateway: qual gateway usar para Pix neste produto ('pushinpay' | 'mundpay' | 'none')
+    const [pixGateway, setPixGateway] = useState<'pushinpay' | 'mundpay' | 'none'>('none');
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [pdfFile, setPdfFile] = useState<File | null>(null);
-    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+    // Derivados para compatibilidade com a API existente
+    const pushinpayEnabled = pixGateway === 'pushinpay';
+    const mundpayEnabled = pixGateway === 'mundpay';
+
+    const { payments, getStatus } = useIntegrations();
+    const isStripeGlobal = getStatus(payments, 'stripe') === 'active';
+    const isPushinPayGlobal = getStatus(payments, 'pushinpay') === 'active';
+    const isMundPayGlobal = getStatus(payments, 'mundpay') === 'active';
 
     useEffect(() => {
         fetchProducts();
@@ -260,8 +270,18 @@ export default function AdminProducts() {
         setAtivo(product.ativo);
         setMundpayUrl(product.mundpay_url || "");
         setStripeEnabled(product.stripe_enabled ?? true);
-        setPushinpayEnabled(product.pushinpay_enabled ?? true);
-        setMundpayEnabled(product.mundpay_enabled ?? !!product.mundpay_url);
+
+        // Determinar qual gateway de Pix está selecionado (Prioridade máxima aos novos campos booleanos)
+        if (product.mundpay_enabled) {
+            setPixGateway('mundpay');
+        } else if (product.pushinpay_enabled) {
+            setPixGateway('pushinpay');
+        } else if (!!product.mundpay_url) {
+            // Caso legado: se tem URL mas não tem mundpay_enabled setado (ex: nulo no banco)
+            setPixGateway('mundpay');
+        } else {
+            setPixGateway('none');
+        }
     };
 
     async function handleSave() {
@@ -298,7 +318,8 @@ export default function AdminProducts() {
                     preco: parseFloat(preco),
                     descricao,
                     ativo,
-                    mundpay_url: mundpayUrl || null,
+                    // Só envia a URL se o gateway selecionado for MundPay
+                    mundpay_url: pixGateway === 'mundpay' ? (mundpayUrl || null) : null,
                     stripe_enabled: stripeEnabled,
                     pushinpay_enabled: pushinpayEnabled,
                     mundpay_enabled: mundpayEnabled,
@@ -360,8 +381,7 @@ export default function AdminProducts() {
         setAtivo(true);
         setMundpayUrl("");
         setStripeEnabled(true);
-        setPushinpayEnabled(true);
-        setMundpayEnabled(false);
+        setPixGateway('none');
         setImageFile(null);
         setPdfFile(null);
     }
@@ -451,76 +471,162 @@ export default function AdminProducts() {
                             </div>
                         </div>
 
-                        <div className="space-y-4 p-4 rounded-xl bg-muted/30 border border-border">
-                            <Label className="text-sm font-semibold flex items-center gap-2">
-                                <CreditCard className="size-4 text-primary" />
-                                Gateway de Pagamento Disponível
-                            </Label>
+                        <div className="space-y-6 pt-6 pb-6 px-6 rounded-3xl bg-gradient-to-br from-muted/40 via-background to-muted/20 border border-border/80 shadow-2xl relative overflow-hidden">
+                            <div className="absolute -right-4 -top-4 opacity-[0.03] rotate-12">
+                                <Zap className="size-32" />
+                            </div>
 
-                            <div className="grid gap-3">
-                                <div className={`p-4 rounded-lg border transition-all ${mundpayEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded bg-black flex items-center justify-center text-[10px] text-white font-bold">MP</div>
-                                            <div>
-                                                <p className="text-sm font-medium">MundPay (Pix Automatizado)</p>
-                                                <p className="text-[11px] text-muted-foreground">Usar link do checkout externo para gerar Pix via robô.</p>
-                                            </div>
-                                        </div>
-                                        <Switch
-                                            checked={mundpayEnabled}
-                                            onCheckedChange={setMundpayEnabled}
-                                        />
-                                    </div>
+                            <div className="flex items-center gap-3 mb-2 relative">
+                                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                                    <Package className="size-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary/80">Configuração de Recebimento</h3>
+                                    <p className="text-[10px] text-muted-foreground uppercase font-medium">Escolha como seus clientes poderão pagar</p>
+                                </div>
+                            </div>
 
-                                    {mundpayEnabled && (
-                                        <div className="mt-4 pt-4 border-t border-primary/10 space-y-2 animate-in fade-in slide-in-from-top-2">
-                                            <div className="flex items-center gap-2">
-                                                <Link className="size-3.5 text-primary" />
-                                                <Label htmlFor="mundpay" className="text-xs font-semibold text-primary">Link de checkout MundPay</Label>
-                                            </div>
-                                            <Input
-                                                id="mundpay"
-                                                value={mundpayUrl}
-                                                onChange={e => setMundpayUrl(e.target.value)}
-                                                placeholder="https://pay.mycheckoutt.com/..."
-                                                className="bg-background h-9 text-sm"
-                                            />
-                                        </div>
-                                    )}
+                            {/* ── GATEWAY DE CARTÃO (Stripe) ── */}
+                            <div className="space-y-3 relative">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-bold flex items-center gap-2 text-foreground/90">
+                                        <div className="size-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                                        Cartão de Crédito (Stripe)
+                                    </Label>
+                                    {!isStripeGlobal && <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-tight">Inativo Globalmente</span>}
                                 </div>
 
-                                <div className={`p-4 rounded-lg border transition-all ${pushinpayEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded bg-gradient-to-br from-[#5D5FEF] to-[#9B5CFA] flex items-center justify-center text-[10px] text-white font-bold">PP</div>
-                                            <div>
-                                                <p className="text-sm font-medium">PushinPay (Pix Direto)</p>
-                                                <p className="text-[11px] text-muted-foreground">Pix nativo com confirmação automática.</p>
+                                {isStripeGlobal ? (
+                                    <div
+                                        onClick={() => setStripeEnabled(!stripeEnabled)}
+                                        className={`group cursor-pointer p-4 rounded-2xl border transition-all duration-500 ${stripeEnabled ? 'bg-blue-500/5 border-blue-500/40 shadow-lg shadow-blue-500/5 ring-1 ring-blue-500/20' : 'bg-background/50 border-border/40 opacity-60 hover:opacity-80'}`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:scale-110 ${stripeEnabled ? 'bg-[#635BFF]' : 'bg-muted text-muted-foreground'}`}>
+                                                    <CreditCard className="size-6" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold group-hover:text-blue-600 transition-colors">Stripe Payments</p>
+                                                    <p className="text-[11px] text-muted-foreground font-medium">Checkout direto, seguro e global.</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${stripeEnabled ? 'text-blue-500' : 'text-muted-foreground'}`}>
+                                                    {stripeEnabled ? 'Ativo' : 'Desativado'}
+                                                </span>
+                                                <Switch checked={stripeEnabled} onCheckedChange={setStripeEnabled} onClick={(e) => e.stopPropagation()} />
                                             </div>
                                         </div>
-                                        <Switch
-                                            checked={pushinpayEnabled}
-                                            onCheckedChange={setPushinpayEnabled}
-                                        />
                                     </div>
+                                ) : (
+                                    <div className="p-4 bg-muted/20 border border-dashed rounded-2xl text-center">
+                                        <p className="text-xs text-muted-foreground">Configure as chaves do Stripe na aba <span className="font-bold text-foreground underline decoration-primary/30">Pagamentos</span>.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── GATEWAY DE PIX (MundPay ou PushinPay) ── */}
+                            <div className="space-y-4 pt-6 border-t border-border/40 relative">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-bold flex items-center gap-2 text-foreground/90">
+                                        <div className="size-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
+                                        Pagamento via PIX (Seletor)
+                                    </Label>
+                                    {!isPushinPayGlobal && !isMundPayGlobal && <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-tight">Inativo Globalmente</span>}
                                 </div>
 
-                                <div className={`p-4 rounded-lg border transition-all ${stripeEnabled ? 'bg-primary/5 border-primary/20' : 'bg-muted/20 border-border/50'}`}>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded bg-[#635BFF] flex items-center justify-center text-[10px] text-white font-bold">S</div>
-                                            <div>
-                                                <p className="text-sm font-medium">Stripe (Cartão de Crédito)</p>
-                                                <p className="text-[11px] text-muted-foreground">Processamento direto no SharkPay.</p>
+                                {(isPushinPayGlobal || isMundPayGlobal) ? (
+                                    <div className="grid gap-3">
+                                        {/* Opção: Desativar Pix */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setPixGateway('none')}
+                                            className={`w-full p-4 rounded-2xl border text-left transition-all duration-300 flex items-center gap-4 ${pixGateway === 'none' ? 'bg-muted border-primary/40 shadow-inner' : 'bg-background/50 border-border/40 hover:border-border/80'}`}
+                                        >
+                                            <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${pixGateway === 'none' ? 'border-primary bg-primary/10' : 'border-muted-foreground/30'}`}>
+                                                {pixGateway === 'none' && <div className="h-2.5 w-2.5 rounded-full bg-primary" />}
                                             </div>
-                                        </div>
-                                        <Switch
-                                            checked={stripeEnabled}
-                                            onCheckedChange={setStripeEnabled}
-                                        />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-bold">Nenhum (Desativar Pix)</p>
+                                                <p className="text-[11px] text-muted-foreground font-medium">Ocultar opção de Pix neste produto.</p>
+                                            </div>
+                                        </button>
+
+                                        {/* Opção: PushinPay */}
+                                        {isPushinPayGlobal && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPixGateway('pushinpay')}
+                                                className={`group w-full p-4 rounded-2xl border text-left transition-all duration-500 flex items-center gap-4 ${pixGateway === 'pushinpay' ? 'bg-purple-500/5 border-purple-500/40 shadow-lg shadow-purple-500/5 ring-1 ring-purple-500/20' : 'bg-background/50 border-border/40 hover:border-border/80'}`}
+                                            >
+                                                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${pixGateway === 'pushinpay' ? 'border-purple-500 bg-purple-500/10' : 'border-muted-foreground/30'}`}>
+                                                    {pixGateway === 'pushinpay' && <div className="h-2.5 w-2.5 rounded-full bg-purple-500" />}
+                                                </div>
+                                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg transition-transform duration-500 group-hover:scale-110 ${pixGateway === 'pushinpay' ? 'bg-gradient-to-br from-[#5D5FEF] to-[#9B5CFA]' : 'bg-muted text-muted-foreground opacity-60'}`}>
+                                                    PP
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold group-hover:text-purple-600 transition-colors">PushinPay API (Nativo)</p>
+                                                    <p className="text-[11px] text-muted-foreground font-medium">QR Code direto no seu checkout.</p>
+                                                </div>
+                                                {pixGateway === 'pushinpay' && <Zap className="size-4 text-purple-500 animate-pulse ml-auto" />}
+                                            </button>
+                                        )}
+
+                                        {/* Opção: MundPay */}
+                                        {isMundPayGlobal && (
+                                            <div className="space-y-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPixGateway('mundpay')}
+                                                    className={`group w-full p-4 rounded-2xl border text-left transition-all duration-500 flex items-center gap-4 ${pixGateway === 'mundpay' ? 'bg-emerald-500/5 border-emerald-500/40 shadow-lg shadow-emerald-500/5 ring-1 ring-emerald-500/20' : 'bg-background/50 border-border/40 hover:border-border/80'}`}
+                                                >
+                                                    <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${pixGateway === 'mundpay' ? 'border-emerald-500 bg-emerald-500/10' : 'border-muted-foreground/30'}`}>
+                                                        {pixGateway === 'mundpay' && <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />}
+                                                    </div>
+                                                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center text-white font-bold shadow-lg transition-transform duration-500 group-hover:scale-110 ${pixGateway === 'mundpay' ? 'bg-black' : 'bg-muted text-muted-foreground opacity-60'}`}>
+                                                        MP
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-bold group-hover:text-emerald-600 transition-colors">MundPay Bot (Popup)</p>
+                                                        <p className="text-[11px] text-muted-foreground font-medium">Redireciona para checkout externo MundPay.</p>
+                                                    </div>
+                                                    {pixGateway === 'mundpay' && <ExternalLink className="size-4 text-emerald-500 animate-pulse ml-auto" />}
+                                                </button>
+
+                                                {pixGateway === 'mundpay' && (
+                                                    <div className="mt-2 ml-10 p-5 rounded-2xl bg-background/80 backdrop-blur-sm border border-emerald-500/30 space-y-4 animate-in fade-in slide-in-from-top-4 duration-500 shadow-xl">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                                                                <Link className="size-4" />
+                                                            </div>
+                                                            <div>
+                                                                <Label htmlFor="mundpay" className="text-xs font-bold text-emerald-600 uppercase tracking-tighter">URL do Checkout MundPay</Label>
+                                                                <p className="text-[10px] text-muted-foreground uppercase font-medium">Onde o robô deve processar o Pix</p>
+                                                            </div>
+                                                        </div>
+                                                        <Input
+                                                            id="mundpay"
+                                                            value={mundpayUrl}
+                                                            onChange={e => setMundpayUrl(e.target.value)}
+                                                            placeholder="https://pay.mycheckoutt.com/..."
+                                                            className="bg-muted/50 border-emerald-500/20 h-11 text-sm focus:ring-emerald-500/20 focus:border-emerald-500/40 rounded-xl transition-all"
+                                                        />
+                                                        <div className="flex items-start gap-2 text-[10px] bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/10">
+                                                            <Zap className="size-3 text-emerald-500 mt-0.5 shrink-0" />
+                                                            <p className="text-emerald-700 leading-relaxed font-medium">Certifique-se que o produto no MundPay tenha exatamente o mesmo valor definido acima (R$ {preco || '0,00'}).</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="p-4 bg-muted/20 border border-dashed rounded-2xl text-center">
+                                        <p className="text-xs text-muted-foreground">Ative PushinPay ou MundPay na aba <span className="font-bold text-foreground underline decoration-primary/30">Pagamentos</span>.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -643,19 +749,77 @@ export default function AdminProducts() {
                                         </div>
                                     )}
 
+                                    {/* Gateways Ativos - DEMONSTRADOR PREMIUM (Inspirado em front-produtos) */}
+                                    <div className="mt-5 pt-4 border-t border-border/40 relative group/gateways">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5 px-2 py-0.5 bg-muted/30 rounded-md border border-border/50">
+                                                    <Zap className="size-3 text-yellow-500" /> Gatways Ativos
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2.5">
+                                            {/* Badge Stripe */}
+                                            <div
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.stripe_enabled
+                                                    ? 'bg-gradient-to-r from-[#635BFF]/10 to-[#635BFF]/5 border-[#635BFF]/30 text-[#635BFF] shadow-sm shadow-[#635BFF]/5'
+                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
+                                                    }`}
+                                                title={product.stripe_enabled ? "Cartão de Crédito Ativo" : "Cartão de Crédito Inativo"}
+                                            >
+                                                <CreditCard className={`size-3.5 transition-transform duration-300 ${product.stripe_enabled ? 'scale-110' : ''}`} />
+                                                <span className="text-[11px] font-extrabold tracking-tight">STRIPE</span>
+                                                {product.stripe_enabled && <div className="size-1 rounded-full bg-[#635BFF] animate-pulse ml-0.5" />}
+                                            </div>
+
+                                            {/* Badge PushinPay (Pix) */}
+                                            <div
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.pushinpay_enabled
+                                                    ? 'bg-gradient-to-r from-purple-500/10 to-purple-600/5 border-purple-500/30 text-purple-600 shadow-sm shadow-purple-500/5'
+                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
+                                                    }`}
+                                                title={product.pushinpay_enabled ? "Pix PushinPay Ativo" : "Pix PushinPay Inativo"}
+                                            >
+                                                <Zap className={`size-3.5 transition-transform duration-300 ${product.pushinpay_enabled ? 'scale-110' : ''}`} />
+                                                <span className="text-[11px] font-extrabold tracking-tight uppercase">PushinPay (Pix)</span>
+                                                {product.pushinpay_enabled && <div className="size-1 rounded-full bg-purple-500 animate-pulse ml-0.5" />}
+                                            </div>
+
+                                            {/* Badge MundPay (Popup) */}
+                                            <div
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.mundpay_enabled
+                                                    ? 'bg-gradient-to-r from-emerald-500/10 to-teal-500/5 border-emerald-500/30 text-emerald-600 shadow-sm shadow-emerald-500/5'
+                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
+                                                    }`}
+                                                title={product.mundpay_enabled ? "MundPay (Pix) Ativo" : "MundPay (Pix) Inativo"}
+                                            >
+                                                <ExternalLink className={`size-3.5 transition-transform duration-300 ${product.mundpay_enabled ? 'scale-110' : ''}`} />
+                                                <span className="text-[11px] font-extrabold tracking-tight uppercase">MundPay (Pix)</span>
+                                                {product.mundpay_enabled && <div className="size-1 rounded-full bg-emerald-500 animate-pulse ml-0.5" />}
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Metadados */}
-                                    <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-                                        <div className="flex items-center gap-3">
-                                            <span className="flex items-center gap-1">
-                                                <FileText className="size-3 text-red-400" />
-                                                PDF: {product.pdf_storage_key ? "Vinculado" : "Não enviado"}
-                                            </span>
-                                            <span>Criado em: {product.criado_em ? new Date(product.criado_em).toLocaleDateString() : '-'}</span>
+                                    <div className="mt-5 pt-4 flex items-center justify-between text-[11px] text-muted-foreground border-t border-border/20">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className={`size-1.5 rounded-full ${product.pdf_storage_key ? 'bg-red-400' : 'bg-muted-foreground/30'}`} />
+                                                <FileText className="size-3 text-muted-foreground/70" />
+                                                PDF: {product.pdf_storage_key ? <span className="text-foreground font-semibold">Vinculado</span> : "Vazio"}
+                                            </div>
+                                            <div className="w-px h-3 bg-border/50" />
+                                            <div className="flex items-center gap-1.5">
+                                                <Plus className="size-3 text-muted-foreground/70" />
+                                                ID: <span className="font-mono text-[9px] opacity-70 cursor-help" title={product.id}>{product.id.substring(0, 8)}...</span>
+                                            </div>
                                         </div>
                                         <div className="flex gap-2">
                                             {product.stripe_product_id && (
-                                                <div className="flex items-center gap-1 text-green-500 font-bold">
-                                                    <Check className="size-3" /> Stripe
+                                                <div className="group/badge relative flex items-center gap-1.5 text-blue-500/80 font-bold bg-blue-500/5 px-2.5 py-1 rounded-lg border border-blue-500/10 transition-colors hover:bg-blue-500/10">
+                                                    <Check className="size-3" /> Stripe Linked
+                                                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover border text-[9px] px-2 py-1 rounded shadow-xl opacity-0 group-hover/badge:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">Sincronizado via API</span>
                                                 </div>
                                             )}
                                         </div>

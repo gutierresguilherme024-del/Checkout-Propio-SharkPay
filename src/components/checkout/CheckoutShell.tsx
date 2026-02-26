@@ -13,14 +13,30 @@ import { Elements, CardElement, useStripe, useElements } from "@stripe/react-str
 
 // Helper: chama a API unificada de pagamento
 async function processarPagamento(payload: Record<string, unknown>) {
-  const res = await fetch('/api/process-payment', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || data.erro || 'Erro no servidor de pagamentos');
-  return data;
+  try {
+    const res = await fetch('/api/process-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // Tratamento para quando a API não está rodando (Vite sem Vercel CLI)
+    if (!res.ok && res.status === 404) {
+      throw new Error("API de pagamentos offline. Teste em produção ou use o comando 'vercel dev' no terminal local.");
+    }
+
+    const text = await res.text();
+    if (!text) throw new Error("Resposta vazia da API de pagamentos.");
+
+    const data = JSON.parse(text);
+    if (!res.ok) throw new Error(data.error || data.erro || 'Erro no servidor de pagamentos');
+    return data;
+  } catch (err: any) {
+    if (err.name === 'SyntaxError' || err.message.includes('JSON')) {
+      throw new Error("Falha ao se conectar com a API de pagamentos no ambiente local.");
+    }
+    throw err;
+  }
 }
 
 // Helper: obter token reCAPTCHA v3 (se disponível)
@@ -358,59 +374,36 @@ export function CheckoutShell({
   const [stripePromise, setStripePromise] = useState<any>(null);
   const methodAutoSwitched = useRef(false);
 
-  // ── STRIPE: ativo se o produto habilita OU se a integração global está ativa ──
+  // ── STRIPE: ativo se o produto habilita E se a integração global está ativa ──
   const isStripeActive = useMemo(() => {
+    const globalActive = getStatus(payments, 'stripe') === 'active';
+    if (!globalActive) return false;
+
     // Se o produto diz explicitamente que Stripe está desabilitado, respeitar
     if (product && product.stripe_enabled === false) return false;
 
-    // Se o produto diz explicitamente que Stripe está habilitado, ou se a coluna não existe (undefined), 
-    // dependemos do status global da integração
-    if (product?.stripe_enabled === true) return true;
-
-    // Se a integração global estiver ativa (getStatus já tem o failsafe para ENV agora), mostramos
-    const status = getStatus(payments, 'stripe');
-    if (status === 'active') return true;
-
-    // Enquanto carrega, se não temos sinal negativo do produto, assumimos true se o ENV tiver a chave
-    if (loading && product?.stripe_enabled !== false) {
-      const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-      return !!envKey && !envKey.includes('placeholder');
-    }
-
-    return false;
-  }, [payments, getStatus, product, loading]);
+    return true;
+  }, [payments, getStatus, product]);
 
   const isPushinPayActive = useMemo(() => {
+    const globalActive = getStatus(payments, 'pushinpay') === 'active';
+    if (!globalActive) return false;
+
     if (product && product.pushinpay_enabled === false) return false;
 
-    // Prioridade 1: Ativação explícita no produto
-    if (product?.pushinpay_enabled === true) return true;
-
-    // Prioridade 2: Status global (integrations ou ENV)
-    const status = getStatus(payments, 'pushinpay');
-    if (status === 'active') return true;
-
-    // Enquanto carrega
-    if (loading && product?.pushinpay_enabled !== false) {
-      const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
-      return !!envKey && envKey.length > 20 && !envKey.includes('placeholder');
-    }
-
-    return false;
-  }, [payments, getStatus, product, loading]);
+    return true;
+  }, [payments, getStatus, product]);
 
   const isMundPayActive = useMemo(() => {
-    // Se o produto tem uma URL MundPay, forçamos como ativo SEMPRE (prioridade máxima)
-    if (product?.mundpay_url) return true;
+    const globalActive = getStatus(payments, 'mundpay') === 'active';
+    if (!globalActive) return false;
 
-    // Caso contrário, respeita o mundpay_enabled se existir e for false
-    if (product && product.mundpay_enabled === false) return false;
+    // Se o produto desativa explicitamente o MundPay, não é ativo
+    if (product?.mundpay_enabled === false) return false;
 
-    // MundPay não tem chave de API no ENV (funciona por redirect), então se o produto ou global habilita, está ativo.
-    if (product?.mundpay_enabled === true) return true;
-
-    return getStatus(payments, 'mundpay') === 'active';
-  }, [payments, getStatus, product, loading]);
+    // É ativo se estiver habilitado no produto OU se for um produto legado com URL 
+    return !!(product?.mundpay_enabled || product?.mundpay_url);
+  }, [payments, getStatus, product]);
 
   // ── STRIPE: Carregar chave pública (PK) ──
   // Roda assim que isStripeActive for true, sem esperar loading completo
@@ -537,9 +530,22 @@ export function CheckoutShell({
     }
 
     // 1. Antes de QUALQUER await (importante para mobile), abrimos o popup se for MundPay
-    const hasMundPayUrl = !!displayProduct.mundpay_url;
-    const pixGateway = hasMundPayUrl ? 'mundpay' : isPushinPayActive ? 'pushinpay' : isMundPayActive ? 'mundpay' : null;
-    const willUseMundPay = method === 'pix' && (pixGateway === 'mundpay');
+    // Gateway de Pix: respeita a seleção explícita no produto
+    // Prioridade: mundpay_enabled (selecionado no Admin Produtos) > pushinpay_enabled > fallback
+    // Gateway de Pix: respeita a seleção exclusiva do produto
+    let pixGateway: string | null = null;
+
+    if (isMundPayActive && method === 'pix') {
+      // Se mundpay_enabled está true ou é legado (tem URL e enabled não é false)
+      pixGateway = 'mundpay';
+    } else if (product?.pushinpay_enabled && isPushinPayActive) {
+      pixGateway = 'pushinpay';
+    } else if (isPushinPayActive) {
+      // Fallback global se nada estiver configurado no produto
+      pixGateway = 'pushinpay';
+    }
+
+    const willUseMundPay = method === 'pix' && pixGateway === 'mundpay';
 
     let mundpayPopup: Window | null = null;
     if (willUseMundPay) {

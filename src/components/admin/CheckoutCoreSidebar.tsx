@@ -15,6 +15,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -106,12 +107,17 @@ export function CheckoutCoreSidebar() {
 
       <div className="flex h-full min-h-0 flex-col">
         <SidebarHeader className="gap-2 px-4 py-4">
-          <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm">
-            {!collapsed && (
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold font-display">Painel Administrativo</p>
-                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">Uso interno</p>
-              </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm flex-1 overflow-hidden">
+              {(!collapsed || isMobile) && (
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold font-display">Painel Administrativo</p>
+                  <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">Uso interno</p>
+                </div>
+              )}
+            </div>
+            {isMobile && (
+              <SidebarTrigger variant="outline" size="sm" className="h-9 w-9 shrink-0 md:hidden" />
             )}
           </div>
         </SidebarHeader>
@@ -135,9 +141,9 @@ export function CheckoutCoreSidebar() {
                           className="group flex items-center gap-2"
                         >
                           <item.icon className="shrink-0" />
-                          {!collapsed && (
+                          {(!collapsed || isMobile) && (
                             <span className="flex flex-1 items-center justify-between truncate">
-                              <span className="truncate">{item.title}</span>
+                              <span className="truncate text-sidebar-foreground">{item.title}</span>
                               {item.badge && (
                                 <span
                                   className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none ${item.badge.color} transition-all duration-300`}
@@ -175,8 +181,8 @@ export function CheckoutCoreSidebar() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-0.5 leading-none overflow-hidden text-left">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">Aparência</span>
-                    <span className="text-sm font-medium truncate">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/90">Aparência</span>
+                    <span className="text-sm font-medium truncate text-sidebar-foreground">
                       {theme === 'dark' ? 'Modo Escuro' : 'Modo Claro'}
                     </span>
                   </div>
@@ -187,12 +193,12 @@ export function CheckoutCoreSidebar() {
                 <SidebarMenuButton asChild tooltip="🏠 Voltar para Home">
                   <Link to="/" className="group flex items-center gap-2">
                     <Home className="shrink-0" />
-                    {!collapsed && <span className="truncate text-sm">Voltar para Home</span>}
+                    {(!collapsed || isMobile) && <span className="truncate text-sm text-sidebar-foreground">Voltar para Home</span>}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <LogoutButton collapsed={collapsed} />
+                <LogoutButton collapsed={collapsed} isMobile={isMobile} />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarFooter>

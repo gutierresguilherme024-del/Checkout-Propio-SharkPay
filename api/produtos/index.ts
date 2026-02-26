@@ -19,7 +19,7 @@ function gerarSlug(nome: string): string {
 }
 
 // Campos extras de gateway — só incluir se a coluna existir no banco
-const GATEWAY_FIELDS = ['stripe_enabled', 'pushinpay_enabled', 'mundpay_enabled']
+const GATEWAY_FIELDS = ['stripe_enabled', 'pushinpay_enabled', 'mundpay_enabled', 'mundpay_url']
 
 function buildRecord(body: Record<string, any>, includeGatewayFields: boolean): Record<string, any> {
     const record: Record<string, any> = {}

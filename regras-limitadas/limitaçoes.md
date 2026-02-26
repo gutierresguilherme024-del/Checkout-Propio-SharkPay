@@ -13,6 +13,7 @@ Este documento define as regras de negócio para a exibição e funcionamento da
 - **PushinPay**: Requer `apiToken`. Sem este token, o checkout não deve exibir a opção de Pix Dinâmico.
 - **MundPay**: Requer `apiToken` e `webhookSecret`. Utilizado como alternativa global para produtos digitais.
 - **Limite**: Atualmente o sistema suporta até 1 gateway de Cartão (Stripe ou MundPay) e 1 gateway de Pix simultaneamente no Checkout.
+- **Testes Locais (Regra Absoluta)**: As rotas de criação de pagamentos (`/api/process-payment`) rodam em **Vercel Serverless Functions**. A inteligência Artificial NÃO DEVE tentar rodar CURL ou testar pagamentos locais batendo na porta do Vite (`http://localhost:8080`). O Vite não sobe rotas Serverless e isso resultará sempre em `Unexpected end of JSON input`. Testes de API devem ser feitos apenas em **Produção** ou usando `vercel dev`.
 
 ### Rastreamento
 - **UTMify**: Requer `apiKey`. O `pixelId` é opcional mas recomendado.
