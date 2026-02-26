@@ -576,6 +576,17 @@ export default function AdminProducts() {
                                             </Button>
 
                                             <Button
+                                                variant="soft"
+                                                size="sm"
+                                                className="gap-2 h-9 px-3 transition-all border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10"
+                                                onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
+                                                disabled={!checkoutUrl}
+                                            >
+                                                <ExternalLink className="size-4" />
+                                                <span>Abrir</span>
+                                            </Button>
+
+                                            <Button
                                                 variant="ghost"
                                                 size="icon"
                                                 onClick={() => handleDelete(product.id)}
