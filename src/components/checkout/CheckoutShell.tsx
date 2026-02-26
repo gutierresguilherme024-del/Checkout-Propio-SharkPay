@@ -406,6 +406,7 @@ export function CheckoutShell({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
   const [consent, setConsent] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pixOpen, setPixOpen] = useState(false);
@@ -502,6 +503,7 @@ export function CheckoutShell({
         gateway: method === 'pix' ? pixGateway : 'stripe',
         recaptcha_token,
         cpf: cpf || undefined,
+        phone: phone || undefined,
         mundpay_url: displayProduct.mundpay_url
       });
 
@@ -658,7 +660,29 @@ export function CheckoutShell({
 
               {isMundPayActive && (
                 <div className="sco-field animate-in fade-in slide-in-from-top-2 duration-300">
-                  <label className="sco-lbl" htmlFor="sco-cpf">CPF do Comprador <span className="text-muted-foreground">(opcional)</span></label>
+                  <label className="sco-lbl" htmlFor="sco-phone">Número de Celular</label>
+                  <div className="flex gap-2">
+                    <div className="sco-inp flex items-center gap-1.5 px-3 w-[90px] shrink-0 text-sm text-muted-foreground">
+                      <span>🇧🇷</span>
+                      <span>+55</span>
+                    </div>
+                    <input id="sco-phone" className={cn("sco-inp flex-1", errors.phone && "sco-inp--err")}
+                      placeholder="(11) 99999-9999"
+                      value={phone}
+                      onChange={e => {
+                        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                        if (v.length > 6) v = v.replace(/(\d{2})(\d{5})(\d+)/, "($1) $2-$3");
+                        else if (v.length > 2) v = v.replace(/(\d{2})(\d+)/, "($1) $2");
+                        setPhone(v);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {isMundPayActive && (
+                <div className="sco-field animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="sco-lbl" htmlFor="sco-cpf">CPF <span className="text-muted-foreground">(opcional)</span></label>
                   <input id="sco-cpf" className={cn("sco-inp", errors.cpf && "sco-inp--err")}
                     placeholder="000.000.000-00"
                     value={cpf}
@@ -670,7 +694,6 @@ export function CheckoutShell({
                       setCpf(v);
                     }}
                   />
-                  <p className="text-[10px] text-muted-foreground mt-1">Preencha para pré-preencher no checkout.</p>
                 </div>
               )}
             </div>

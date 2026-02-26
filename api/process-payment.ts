@@ -225,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PIX VIA MUNDPAY (POPUP + POLLING)
     // ═══════════════════════════════════════
     if (method === 'pix' && gateway === 'mundpay') {
-        const { cpf, mundpay_url } = req.body
+        const { cpf, phone, mundpay_url } = req.body
 
         if (!mundpay_url) {
             return res.status(400).json({ error: 'URL do checkout MundPay não configurada para este produto.' })
@@ -249,11 +249,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 console.error('[process-payment/mundpay] Supabase insert:', e)
             }
 
-            // 2. Montar URL do checkout MundPay com dados do comprador
+            // 2. Montar URL do checkout MundPay com TODOS os dados do comprador
             const checkoutUrl = new URL(mundpay_url)
             if (nome) checkoutUrl.searchParams.set('name', nome)
             if (email) checkoutUrl.searchParams.set('email', email)
             if (cpf) checkoutUrl.searchParams.set('cpf', cpf.replace(/\D/g, ''))
+            if (phone) {
+                const phoneDigits = phone.replace(/\D/g, '')
+                checkoutUrl.searchParams.set('phone', phoneDigits)
+                checkoutUrl.searchParams.set('phone_number', phoneDigits)
+            }
 
             console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
 
