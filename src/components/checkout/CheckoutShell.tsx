@@ -486,19 +486,20 @@ export function CheckoutShell({
       return;
     }
 
-    setIsGeneratingPix(true);
-    const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
-    const recaptcha_token = await getRecaptchaToken();
-
-    // IMPORTANTE: Abrir a janela popup ANTES de qualquer await/async
-    // Navegadores mobile bloqueiam window.open fora do contexto síncrono do clique
+    // 1. Antes de QUALQUER await (importante para mobile), abrimos o popup se for MundPay
     const hasMundPayUrl = !!displayProduct.mundpay_url;
     const pixGateway = hasMundPayUrl ? 'mundpay' : isPushinPayActive ? 'pushinpay' : isMundPayActive ? 'mundpay' : null;
     const willUseMundPay = method === 'pix' && (pixGateway === 'mundpay');
+
     let mundpayPopup: Window | null = null;
     if (willUseMundPay) {
+      // Abrimos sobre:blank primeiro para registrar a intenção de popup síncrona
       mundpayPopup = window.open('about:blank', 'mundpay_checkout', 'width=500,height=700,scrollbars=yes');
     }
+
+    setIsGeneratingPix(true);
+    const utms = JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}");
+    const recaptcha_token = await getRecaptchaToken();
 
     try {
       const data = await processarPagamento({
@@ -579,7 +580,7 @@ export function CheckoutShell({
                   <div className="flex flex-col gap-3 w-full mt-2">
                     <button
                       onClick={() => mundpayCheckoutUrl && window.open(mundpayCheckoutUrl, 'mundpay_checkout', 'width=500,height=700,scrollbars=yes')}
-                      className="sco-btn w-full flex items-center justify-center gap-2"
+                      className="sco-cta w-full flex items-center justify-center gap-2"
                     >
                       <ExternalLink className="size-4" />
                       Não abriu? Clique aqui para ver o Pix

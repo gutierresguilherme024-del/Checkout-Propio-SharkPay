@@ -93,14 +93,7 @@ export default function PublicCheckout() {
     return (
       <div className="sco-page relative overflow-hidden">
         <div className="absolute inset-0 bg-[image:var(--gradient-page)] pointer-events-none opacity-40 mix-blend-overlay" />
-        <div className="sco-page-topbar z-50">
-          <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 h-9 px-3">
-            <NavLink to="/">
-              <ArrowLeft className="w-4 h-4" />
-              <span>Home</span>
-            </NavLink>
-          </Button>
-        </div>
+
         <HeroGlow className="flex-1 flex flex-col">
           <div className="sco-page-body relative z-10">
             <CheckoutShell
@@ -128,9 +121,6 @@ export default function PublicCheckout() {
         {error ? `Erro técnico: ${error}` : 'O link acessado é inválido ou o produto está inativo.'}
       </p>
       <div className="flex gap-4">
-        <Button asChild variant="outline">
-          <NavLink to="/">Voltar para Home</NavLink>
-        </Button>
         {slug !== 'demo' && (
           <Button asChild>
             <NavLink to="/checkout/demo">Ver Demonstração</NavLink>
@@ -144,14 +134,7 @@ export default function PublicCheckout() {
     <div className="sco-page relative overflow-hidden">
       <div className="absolute inset-0 bg-[image:var(--gradient-page)] pointer-events-none opacity-40 mix-blend-overlay" />
 
-      <div className="sco-page-topbar z-50">
-        <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 h-9 px-3">
-          <NavLink to="/">
-            <ArrowLeft className="w-4 h-4" />
-            <span>Home</span>
-          </NavLink>
-        </Button>
-      </div>
+
 
       <HeroGlow className="flex-1 flex flex-col">
         <div className="sco-page-body relative z-10">

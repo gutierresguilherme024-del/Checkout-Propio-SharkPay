@@ -239,6 +239,12 @@ All colors MUST be HSL.
   padding: 3rem 1rem 4rem;
 }
 
+@media (max-width: 760px) {
+  .sco-page-body {
+    padding: 1rem 0.75rem 2rem;
+  }
+}
+
 /* ════════════════════════════════════════════════════════════════
    SCO ROOT — sem borda/card, apenas layout limpo sobre o fundo
 ════════════════════════════════════════════════════════════════ */
@@ -442,6 +448,19 @@ All colors MUST be HSL.
   font-weight: 700;
   color: hsl(var(--foreground));
   letter-spacing: -0.01em;
+}
+
+@media (max-width: 760px) {
+  .sco-sum-name {
+    font-size: 1.25rem;
+  }
+  .sco-sum-price-row strong {
+    font-size: 1.5rem;
+  }
+  .sco-logo {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
 }
 
 .sco-sum-divider {
