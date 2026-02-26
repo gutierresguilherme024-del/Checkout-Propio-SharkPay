@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn, normalizeImageUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 import { integrationService } from "@/lib/integrations";
+import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/use-integrations";
 import type { CheckoutSettings, PaymentMethod } from "./types";
@@ -410,6 +411,35 @@ export function CheckoutShell({
   const [pixOpen, setPixOpen] = useState(false);
   const [localPixData, setLocalPixData] = useState<{ qr_code?: string; qr_code_text?: string; expires_at?: string } | null>(null);
 
+  // MundPay — popup + polling
+  const [mundpayPending, setMundpayPending] = useState(false);
+  const [mundpayPedidoId, setMundpayPedidoId] = useState<string | null>(null);
+  const [mundpayCheckoutUrl, setMundpayCheckoutUrl] = useState<string | null>(null);
+  const [mundpayPago, setMundpayPago] = useState(false);
+
+  // Polling do status do pedido MundPay no Supabase
+  useEffect(() => {
+    if (!mundpayPedidoId || !mundpayPending) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from('pedidos')
+          .select('status')
+          .eq('id', mundpayPedidoId)
+          .single();
+
+        if (data?.status === 'pago') {
+          setMundpayPago(true);
+          setMundpayPending(false);
+          toast.success("✅ Pagamento MundPay confirmado!");
+        }
+      } catch { /* ignora erros de polling */ }
+    }, 4000); // Poll a cada 4s
+
+    return () => clearInterval(interval);
+  }, [mundpayPedidoId, mundpayPending]);
+
   useEffect(() => {
     if (loading) return;
     if (method === 'card' && !isStripeActive) {
@@ -476,10 +506,14 @@ export function CheckoutShell({
       });
 
       if (method === 'pix') {
-        // MundPay retorna redirect_url, não QR code
-        if (data.redirect_url) {
-          toast.success("Redirecionando para o checkout MundPay...");
-          window.open(data.redirect_url, '_blank');
+        // MundPay retorna checkout_url para popup
+        if (data.checkout_url) {
+          setMundpayCheckoutUrl(data.checkout_url);
+          setMundpayPedidoId(data.pedido_id);
+          setMundpayPending(true);
+          setMundpayPago(false);
+          // Abrir num popup
+          window.open(data.checkout_url, 'mundpay_checkout', 'width=500,height=700,scrollbars=yes');
           onPaySuccess?.(data);
         } else {
           // PushinPay retorna QR code
@@ -494,6 +528,68 @@ export function CheckoutShell({
       setIsGeneratingPix(false);
     }
   };
+
+  // Se MundPay está pendente, exibir tela de espera
+  if (mundpayPending || mundpayPago) {
+    return (
+      <div className="sco-root" style={{ "--sco-h": hue } as React.CSSProperties}>
+        <div className="sco-cols">
+          <div className="sco-form mx-auto max-w-md w-full">
+            <div className="flex flex-col items-center justify-center p-8 gap-6 text-center">
+              {mundpayPago ? (
+                <>
+                  <div className="size-20 rounded-full bg-emerald-500/20 flex items-center justify-center animate-in zoom-in duration-500">
+                    <CheckCircle2 className="size-10 text-emerald-500" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-emerald-400">Pagamento Confirmado!</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Seu pagamento via MundPay foi aprovado com sucesso.
+                    Você receberá o produto no e-mail informado.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="size-20 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Loader2 className="size-10 text-primary animate-spin" />
+                  </div>
+                  <h2 className="text-xl font-bold">Aguardando Pagamento</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Complete o pagamento na janela do MundPay.
+                    Esta página atualizará automaticamente quando seu pagamento for confirmado.
+                  </p>
+
+                  <div className="flex flex-col gap-3 w-full mt-2">
+                    <button
+                      onClick={() => mundpayCheckoutUrl && window.open(mundpayCheckoutUrl, 'mundpay_checkout', 'width=500,height=700,scrollbars=yes')}
+                      className="sco-btn w-full flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink className="size-4" />
+                      Reabrir checkout MundPay
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMundpayPending(false);
+                        setMundpayPedidoId(null);
+                        setMundpayCheckoutUrl(null);
+                      }}
+                      className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
+                    >
+                      Cancelar e voltar
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
+                    <div className="size-2 rounded-full bg-yellow-500 animate-pulse" />
+                    Verificando status a cada poucos segundos...
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

@@ -222,7 +222,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ═══════════════════════════════════════
-    // PIX VIA MUNDPAY (REDIRECT DIRETO)
+    // PIX VIA MUNDPAY (POPUP + POLLING)
     // ═══════════════════════════════════════
     if (method === 'pix' && gateway === 'mundpay') {
         const { cpf, mundpay_url } = req.body
@@ -238,7 +238,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     id: pid,
                     email_comprador: email,
                     nome_comprador: nome || 'Cliente',
-                    cpf_comprador: cpf || null,
                     valor: Number(valor),
                     metodo_pagamento: 'pix',
                     status: 'pendente',
@@ -250,17 +249,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 console.error('[process-payment/mundpay] Supabase insert:', e)
             }
 
-            // 2. Montar URL de redirect com dados do comprador
-            const redirectUrl = new URL(mundpay_url)
-            if (nome) redirectUrl.searchParams.set('name', nome)
-            if (email) redirectUrl.searchParams.set('email', email)
-            if (cpf) redirectUrl.searchParams.set('cpf', cpf.replace(/\D/g, ''))
+            // 2. Montar URL do checkout MundPay com dados do comprador
+            const checkoutUrl = new URL(mundpay_url)
+            if (nome) checkoutUrl.searchParams.set('name', nome)
+            if (email) checkoutUrl.searchParams.set('email', email)
+            if (cpf) checkoutUrl.searchParams.set('cpf', cpf.replace(/\D/g, ''))
 
-            console.log(`[MundPay] Redirect para: ${redirectUrl.toString()}`)
+            console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
 
-            // 3. Retornar URL de redirect para o frontend
+            // 3. Retornar URL do checkout + pedido_id para o frontend fazer polling
             return res.status(200).json({
-                redirect_url: redirectUrl.toString(),
+                checkout_url: checkoutUrl.toString(),
                 pedido_id: pid,
                 gateway: 'mundpay'
             })
@@ -268,7 +267,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (err: any) {
             console.error('[process-payment/mundpay]:', err)
             try {
-                await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
+                await supabase.from('pedidos').update({ status: 'falhou' } as any).eq('id', pid)
             } catch { /* ignora */ }
             return res.status(500).json({ error: err.message || 'Erro ao processar pagamento MundPay' })
         }
