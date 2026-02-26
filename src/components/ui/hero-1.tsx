@@ -50,7 +50,7 @@ export function HeroSection() {
             "drop-shadow-[0_0_35px_hsl(var(--primary)/0.18)]",
           )}
         >
-          Shark<span className="text-primary">Pay</span>: O Checkout <br />
+          O Checkout <br />
           de Alta Conversão
         </h1>
 

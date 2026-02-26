@@ -99,7 +99,7 @@ export default function PublicCheckout() {
             <CheckoutShell
               settings={{
                 ...settings,
-                headline: settings.headline || "Demonstração SharkPay",
+                headline: settings.headline || "Demonstração do Checkout",
                 subheadline: settings.subheadline || "Veja como seu checkout ficará para seus clientes."
               }}
               product={{

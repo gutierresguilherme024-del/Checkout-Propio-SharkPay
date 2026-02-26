@@ -320,7 +320,7 @@ function PixModal({
 
         <div className="pix-panel-ft">
           <Ico.Shield />
-          Transação processada com segurança pelo SharkPay
+          Transação processada com segurança
         </div>
       </div>
     </div>
@@ -428,7 +428,7 @@ export function CheckoutShell({
     const imgResolved = normalizeImageUrl(img);
     if (product) return { ...product, image_url: imgResolved };
     return {
-      name: settings.headline || "Produto SharkPay",
+      name: settings.headline || "Produto Digital",
       price: 97,
       image_url: null,
       delivery_content: "Obrigado por sua compra!"
