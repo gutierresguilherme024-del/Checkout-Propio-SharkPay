@@ -372,9 +372,11 @@ export function CheckoutShell({
   }, [payments, getStatus, product?.pushinpay_enabled]);
 
   const isMundPayActive = useMemo(() => {
-    if (product && product.mundpay_enabled === false) return false;
-    // Se o produto tem uma URL MundPay, forçamos como ativo para este checkout
+    // Se o produto tem uma URL MundPay, forçamos como ativo SEMPRE (prioridade máxima)
     if (product?.mundpay_url) return true;
+
+    // Só checa mundpay_enabled se não tiver URL (campo genérico de controle)
+    if (product && product.mundpay_enabled === false) return false;
 
     const status = getStatus(payments, 'mundpay');
     if (status === 'inactive') return false;
