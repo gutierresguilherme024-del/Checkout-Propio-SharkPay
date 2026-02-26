@@ -85,7 +85,7 @@ export default function Sucesso() {
                     {/* Rodapé */}
                     <div className="mt-8 pt-6 border-t border-slate-700/30">
                         <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-                            🔒 Transação processada com segurança pelo <strong>SharkPay</strong>
+                            🔒 Transação processada com segurança
                         </p>
                     </div>
                 </div>

@@ -133,14 +133,9 @@ export default function AgenteIA() {
         <div className="max-w-5xl mx-auto h-[calc(100vh-140px)] flex flex-col gap-6">
             {/* Minimalist Header */}
             <header className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                        <Bot className="size-6" />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Agente SharkPay</h1>
-                        <p className="text-xs text-muted-foreground">Especialista em Integrações e Infraestrutura</p>
-                    </div>
+                <div>
+                    <h1 className="text-xl font-bold tracking-tight uppercase">Assistente IA</h1>
+                    <p className="text-xs text-muted-foreground">Especialista em Integrações e Infraestrutura</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <AnimatePresence>

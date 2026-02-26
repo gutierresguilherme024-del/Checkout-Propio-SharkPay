@@ -107,13 +107,10 @@ export function CheckoutCoreSidebar() {
       <div className="flex h-full min-h-0 flex-col">
         <SidebarHeader className="gap-2 px-4 py-4">
           <div className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm">
-            <div className="grid size-9 place-items-center rounded-md bg-[image:var(--gradient-hero)] text-primary-foreground shadow-[var(--shadow-glow)]">
-              <span className="text-sm font-brand font-semibold">SP</span>
-            </div>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold font-display">SharkPay Checkout</p>
-                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">v2 • uso interno</p>
+                <p className="truncate text-sm font-semibold font-display">Painel Administrativo</p>
+                <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">Uso interno</p>
               </div>
             )}
           </div>

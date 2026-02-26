@@ -140,25 +140,7 @@ function MobileMenu({ open, children, className, ...props }: MobileMenuProps) {
 }
 
 export const WordmarkIcon = (props: React.ComponentProps<"svg">) => (
-  <div className={cn("flex items-center gap-2", props.className)}>
-    <div className="relative size-8 flex items-center justify-center rounded-lg bg-primary/10 border border-primary/20 shadow-[0_0_15px_rgba(30,210,230,0.15)] overflow-hidden group">
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-5 text-primary drop-shadow-[0_0_8px_hsl(var(--primary))] transition-transform group-hover:scale-110"
-      >
-        <path d="M12 2C12 2 12 7 12 12C12 17 8 22 8 22" strokeDasharray="2 2" className="opacity-30" />
-        <path d="M16 22C16 22 19 18 19 12C19 6 12 2 12 2C12 2 5 6 5 12C5 18 8 22 8 22" />
-        <path d="M8 22H16" />
-      </svg>
-      <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 to-transparent pointer-none" />
-    </div>
-    <span className="text-[1.5rem] tracking-tight text-foreground flex items-center leading-none font-brand">
-      Shark<span className="text-primary">Pay</span>
-    </span>
-  </div>
+  <span className="text-[1.5rem] tracking-tight text-foreground flex items-center leading-none font-brand uppercase">
+    Painel
+  </span>
 );
