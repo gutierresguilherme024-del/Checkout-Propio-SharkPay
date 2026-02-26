@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Language" content="pt-BR" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- TODO: Set the document title to the name of your application -->
   <title>SharkPay Checkout</title>
@@ -37,6 +38,14 @@
       </div>
     </div>
   </div>
+  <script>
+    // Forçar idioma pt-BR silenciosamente (cookies + localStorage)
+    document.cookie='locale=pt-BR;path=/;max-age=31536000;SameSite=Lax';
+    document.cookie='language=pt-BR;path=/;max-age=31536000;SameSite=Lax';
+    document.cookie='lang=pt_BR;path=/;max-age=31536000;SameSite=Lax';
+    document.cookie='preferred_language=pt-BR;path=/;max-age=31536000;SameSite=Lax';
+    try{localStorage.setItem('locale','pt-BR');localStorage.setItem('language','pt-BR');}catch(e){}
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

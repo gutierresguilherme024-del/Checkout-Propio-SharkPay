@@ -571,11 +571,10 @@ export function CheckoutShell({
           setMundpayPedidoId(data.pedido_id);
           setMundpayPending(true);
           setMundpayPago(false);
-          // Redirecionar o popup já aberto para a URL da MundPay
+          // Abrir o checkout da MundPay diretamente
           if (mundpayPopup && !mundpayPopup.closed) {
             mundpayPopup.location.href = data.checkout_url;
           } else {
-            // Fallback: se o popup foi bloqueado, redirecionar na mesma aba
             window.open(data.checkout_url, '_blank');
           }
           onPaySuccess?.(data);
