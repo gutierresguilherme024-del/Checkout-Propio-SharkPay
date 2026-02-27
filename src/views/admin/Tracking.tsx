@@ -53,6 +53,8 @@ const TRACKING_INTEGRATIONS = [
 export default function AdminTracking() {
   const [apiKey, setApiKey] = useState("");
   const [pixelId, setPixelId] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [utmScript, setUtmScript] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [configOpen, setConfigOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +72,8 @@ export default function AdminTracking() {
       if (utmify) {
         setApiKey(String(utmify.config.apiKey || ""));
         setPixelId(String(utmify.config.pixelId || ""));
+        setWebhookUrl(String(utmify.config.webhookUrl || ""));
+        setUtmScript(String(utmify.config.utmScript || ""));
         setEnabled(utmify.enabled);
       }
       setIsLoading(false);
@@ -79,9 +83,9 @@ export default function AdminTracking() {
 
   const connection = useMemo(() => {
     if (!enabled) return { label: "Inativo", tone: "secondary" as const };
-    if (apiKey && pixelId) return { label: "Conectado", tone: "default" as const };
+    if (apiKey || pixelId || webhookUrl || utmScript) return { label: "Conectado", tone: "default" as const };
     return { label: "Configuração incompleta", tone: "secondary" as const };
-  }, [enabled, apiKey, pixelId]);
+  }, [enabled, apiKey, pixelId, webhookUrl, utmScript]);
 
   const isConnected = connection.label === "Conectado";
 
@@ -91,27 +95,12 @@ export default function AdminTracking() {
       type: 'tracking',
       name: 'UTMify',
       enabled,
-      config: { apiKey, pixelId }
+      config: { apiKey, pixelId, webhookUrl, utmScript }
     });
     toast.success("Configurações do UTMify salvas com sucesso!");
   };
 
-  const testEvent = async () => {
-    const ok = Boolean(apiKey && pixelId && enabled);
-    const row: EventLog = {
-      id: `evt_${Math.random().toString(16).slice(2, 7)}`,
-      name: "test_event",
-      status: ok ? "sent" : "failed",
-      createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
-    };
-
-    if (ok) {
-      await integrationService.sendToN8N({ event: 'test_tracking', apiKey, pixelId });
-    }
-
-    setLogs((l) => [row, ...l].slice(0, 10));
-    toast(ok ? "Evento de teste enviado com sucesso!" : "Falha: Verifique se as chaves estão preenchidas.");
-  };
+  // Removido botão testar evento n8n
 
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Carregando integrações...</div>;
 
@@ -169,7 +158,7 @@ export default function AdminTracking() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label>API Key</Label>
+              <Label>API Key (Opcional)</Label>
               <Input
                 type="password"
                 value={apiKey}
@@ -179,21 +168,37 @@ export default function AdminTracking() {
               <p className="text-xs text-muted-foreground">Chave de autenticação do UTMify.</p>
             </div>
             <div className="grid gap-2">
-              <Label>Pixel ID</Label>
+              <Label>Pixel ID (Opcional)</Label>
               <Input
                 value={pixelId}
                 onChange={(e) => setPixelId(e.target.value)}
                 placeholder="pix_123"
               />
             </div>
+            <div className="grid gap-2 md:col-span-2">
+              <Label>Webhook URL (Postback)</Label>
+              <Input
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://tracker.utmify.com.br/webhook/..."
+              />
+              <p className="text-xs text-muted-foreground">URL para onde enviaremos eventos de venda.</p>
+            </div>
+            <div className="grid gap-2 md:col-span-2">
+              <Label>Script UTMify (Header)</Label>
+              <textarea
+                className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono text-xs"
+                value={utmScript}
+                onChange={(e) => setUtmScript(e.target.value)}
+                placeholder="<!-- Script do UTMify aqui -->"
+              />
+              <p className="text-xs text-muted-foreground">Cole o script fornecido pelo UTMify para ser injetado em todos os checkouts ativos.</p>
+            </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Button variant="hero" onClick={handleSave}>
               Salvar Configurações
-            </Button>
-            <Button variant="soft" onClick={testEvent}>
-              Testar Evento (n8n)
             </Button>
             <Button
               variant="ghost"

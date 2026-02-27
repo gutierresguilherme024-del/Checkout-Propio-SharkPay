@@ -18,7 +18,7 @@ export default function Sucesso() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-950">
+            <div className="flex items-center justify-center bg-slate-950" style={{ minHeight: '100dvh' }}>
                 <div className="flex flex-col items-center gap-4">
                     <Loader2 className="w-10 h-10 animate-spin text-primary" />
                     <p className="text-muted-foreground">Confirmando pagamento...</p>
@@ -28,7 +28,7 @@ export default function Sucesso() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+        <div className="flex items-center justify-center bg-slate-950 p-4" style={{ minHeight: '100dvh' }}>
             <div className="w-full max-w-md">
                 {/* Card principal */}
                 <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/10 via-slate-900 to-slate-950 p-8 text-center shadow-2xl shadow-emerald-500/5">

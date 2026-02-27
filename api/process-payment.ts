@@ -23,6 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
 
     if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' })
@@ -73,6 +74,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Gerar ID único do pedido
     const pid = `PED-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
 
+    // ─── SaaS: Identificar o dono do produto ───
+    let productOwnerId: string | null = null
+    let productId: string | null = null
+    try {
+        if (checkout_slug) {
+            const { data: prod } = await supabase
+                .from('produtos')
+                .select('id, user_id, nome')
+                .eq('checkout_slug', checkout_slug)
+                .maybeSingle()
+            if (prod) {
+                productOwnerId = prod.user_id || null
+                productId = prod.id
+            }
+        }
+    } catch (e) {
+        console.warn('[process-payment] Erro ao buscar owner:', e)
+    }
+
     // ═══════════════════════════════════════
     // CARTÃO VIA STRIPE
     // ═══════════════════════════════════════
@@ -80,11 +100,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
 
         try {
-            const { data: integ } = await supabase
+            let query = supabase
                 .from('integrations')
                 .select('config, enabled')
                 .eq('id', 'stripe')
-                .single()
+
+            if (productOwnerId) query = query.eq('user_id', productOwnerId)
+
+            const { data: integ } = await query.maybeSingle()
+
             // Se tiver chave no banco, usa ela (prioridade sobre o ENV)
             if (integ?.config?.secKey && !String(integ.config.secKey).includes('placeholder')) {
                 stripeKey = integ.config.secKey as string
@@ -106,7 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 metadata: {
                     pedido_id: pid,
                     utm_source: utm_source || '',
-                    produto_nome: produto_nome || ''
+                    produto_nome: produto_nome || '',
+                    product_owner: productOwnerId || ''
                 }
             })
 
@@ -114,6 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 await supabase.from('pedidos').insert({
                     id: pid,
+                    user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome || 'Cliente',
                     valor: Number(valor),
@@ -121,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     status: 'pendente',
                     gateway: 'stripe',
                     utm_source: utm_source || null,
+                    checkout_slug: checkout_slug || null,
                     stripe_payment_intent: paymentIntent.id
                 } as any)
             } catch (e) {
@@ -136,9 +163,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('[process-payment/card]:', error)
             try {
                 await supabase.from('pedidos').insert({
-                    id: pid, email_comprador: email, nome_comprador: nome,
+                    id: pid, user_id: productOwnerId, email_comprador: email, nome_comprador: nome,
                     valor: Number(valor), metodo_pagamento: 'card',
-                    status: 'falhou', gateway: 'stripe', erro: error.message
+                    status: 'falhou', gateway: 'stripe', erro: error.message,
+                    checkout_slug: checkout_slug || null
                 } as any)
             } catch { /* ignora */ }
             return res.status(500).json({ error: error.message || 'Erro ao processar cartão' })
@@ -152,17 +180,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let token = process.env.PUSHINPAY_TOKEN || process.env.VITE_PUSHINPAY_TOKEN
 
         try {
-            const { data: integ } = await supabase
+            let query = supabase
                 .from('integrations')
                 .select('config, enabled')
                 .eq('id', 'pushinpay')
-                .single()
+
+            if (productOwnerId) query = query.eq('user_id', productOwnerId)
+
+            const { data: integ } = await query.maybeSingle()
+
             if (integ?.enabled && integ.config?.apiToken) {
                 token = integ.config.apiToken as string
             }
         } catch { /* usa env */ }
 
-        // PushinPay indisponível — cascata para MundPay
+        // PushinPay indisponível
         if (!token || token.length < 10 || token.includes('placeholder')) {
             return res.status(500).json({ error: 'PushinPay Token não configurado.' })
         }
@@ -172,13 +204,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 await supabase.from('pedidos').insert({
                     id: pid,
+                    user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome || 'Cliente',
                     valor: Number(valor),
                     metodo_pagamento: 'pix',
                     status: 'pendente',
                     gateway: 'pushinpay',
-                    utm_source: utm_source || null
+                    utm_source: utm_source || null,
+                    checkout_slug: checkout_slug || null
                 } as any)
             } catch (e) {
                 console.error('[process-payment/pix/pushinpay] Supabase insert:', e)
@@ -207,8 +241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch { /* ignora */ }
 
             return res.status(200).json({
-                qr_code: pixData.qr_code_base64 || pixData.qr_code, // Tenta base64 primeiro
-                qr_code_text: pixData.qr_code || pixData.qr_code_text, // Copia e cola
+                qr_code: pixData.qr_code_base64 || pixData.qr_code,
+                qr_code_text: pixData.qr_code || pixData.qr_code_text,
                 expires_at: pixData.expires_at || new Date(Date.now() + 30 * 60000).toISOString(),
                 pedido_id: pid,
                 gateway: 'pushinpay'
@@ -237,6 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 await supabase.from('pedidos').insert({
                     id: pid,
+                    user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome || 'Cliente',
                     valor: Number(valor),
@@ -257,27 +292,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (cpf) {
                 const cpfLimpo = cpf.replace(/\D/g, '')
                 checkoutUrl.searchParams.set('document', cpfLimpo)
-                checkoutUrl.searchParams.set('cpf', cpfLimpo) // mantemos por garantia
+                checkoutUrl.searchParams.set('cpf', cpfLimpo)
             }
             if (phone) {
                 const phoneDigits = phone.replace(/\D/g, '')
                 checkoutUrl.searchParams.set('phone', phoneDigits)
                 checkoutUrl.searchParams.set('phone_number', phoneDigits)
             }
-            // Parâmetros de Localização e Moeda (Forçar BRL e PT-BR)
+            // Parâmetros de Localização e Moeda
             checkoutUrl.searchParams.set('locale', 'pt_BR')
             checkoutUrl.searchParams.set('lang', 'pt_BR')
             checkoutUrl.searchParams.set('currency', 'BRL')
             checkoutUrl.searchParams.set('country', 'BR')
 
-            // Força a seleção do PIX no checkout da MundPay (Parâmetros redundantes)
+            // Força a seleção do PIX
             checkoutUrl.searchParams.set('payment_method', 'pix')
             checkoutUrl.searchParams.set('method', 'pix')
             checkoutUrl.searchParams.set('pay_method', 'pix')
 
-            console.log(`[MundPay] Checkout URL gerado: ${checkoutUrl.toString()}`)
+            // Rastreabilidade para Webhooks
+            checkoutUrl.searchParams.set('external_id', pid)
+            checkoutUrl.searchParams.set('metadata[pedido_id]', pid)
+            checkoutUrl.searchParams.set('reference', pid)
 
-            // 3. Retornar URL do checkout + pedido_id para o frontend fazer polling
             return res.status(200).json({
                 checkout_url: checkoutUrl.toString(),
                 pedido_id: pid,

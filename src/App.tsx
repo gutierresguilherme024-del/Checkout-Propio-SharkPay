@@ -7,10 +7,12 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 
-// Lazy loaded views
+// Checkout importado diretamente (rota mais crítica para leads — sem lazy loading)
+import Checkout from "./views/Checkout";
+
+// Lazy loaded views (rotas admin — carregam sob demanda)
 const Index = lazy(() => import("./views/Index"));
 const Login = lazy(() => import("./views/Login"));
-const Checkout = lazy(() => import("./views/Checkout"));
 const Sucesso = lazy(() => import("./views/Sucesso"));
 const AdminLayout = lazy(() => import("./views/admin/AdminLayout"));
 const Overview = lazy(() => import("./views/admin/Overview"));
@@ -20,6 +22,7 @@ const Products = lazy(() => import("./views/admin/Products"));
 const Delivery = lazy(() => import("./views/admin/Delivery"));
 const Editor = lazy(() => import("./views/admin/Editor"));
 const AgenteIA = lazy(() => import("./views/admin/AgenteIA"));
+const AdminChangelog = lazy(() => import("./views/admin/AdminChangelog"));
 
 const LoadingFallback = () => (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -56,6 +59,7 @@ const App = () => {
                                         <Route path="delivery" element={<Delivery />} />
                                         <Route path="editor" element={<Editor />} />
                                         <Route path="agente" element={<AgenteIA />} />
+                                        <Route path="changelog" element={<AdminChangelog />} />
                                     </Route>
 
                                     <Route path="*" element={<Navigate to="/" replace />} />

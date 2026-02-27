@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 
 // import { NavLink } from "@/components/NavLink"; // Removido
-import { BarChart3, Bot, CreditCard, Home, Link2, Mail, Palette, Package, Moon, Sun, Settings } from "lucide-react";
+import { BarChart3, Bot, CreditCard, Home, History, Link2, Mail, Palette, Package, Moon, Sun, Settings } from "lucide-react";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { LogoutButton } from "./LogoutButton";
 import { useTheme } from "../theme/ThemeProvider";
@@ -83,6 +83,13 @@ export function CheckoutCoreSidebar() {
       icon: Bot,
       emoji: "🤖",
       badge: { label: "LLM", color: "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.3)]" },
+    },
+    {
+      title: "Atualizações",
+      url: "/admin/changelog",
+      icon: History,
+      emoji: "📋",
+      badge: { label: "Audit", color: "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]" },
     },
   ], [activeGatewaysCount, activeTrackingCount, loading]);
 

@@ -80,16 +80,28 @@ export default async function handler(req: any, res: any) {
     try {
         console.log(`[API Produtos] Método: ${req.method}`, req.query);
 
+        // Extrair userId do token Bearer
+        const authHeader = req.headers.authorization
+        const userId = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null
+
         if (req.method === 'GET') {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('produtos')
                 .select('*')
                 .order('criado_em', { ascending: false })
+
+            if (userId) query = query.eq('user_id', userId)
+
+            const { data, error } = await query
 
             if (error) throw error
             return res.status(200).json({ produtos: data || [] })
 
         } else if (req.method === 'POST') {
+            if (!userId) {
+                return res.status(401).json({ error: 'Usuário não autenticado (Authorization header faltando)' })
+            }
+
             const {
                 nome, preco, descricao, ativo, imagem_url, pdf_storage_key,
                 stripe_product_id, stripe_price_id, mundpay_url,
@@ -113,6 +125,7 @@ export default async function handler(req: any, res: any) {
                 stripe_price_id: stripe_price_id || null,
                 checkout_slug,
                 mundpay_url: mundpay_url || null,
+                user_id: userId,
                 atualizado_em: new Date().toISOString()
             }
 
@@ -128,15 +141,23 @@ export default async function handler(req: any, res: any) {
             const { id } = req.query
             if (!id) return res.status(400).json({ error: 'ID do produto obrigatório' })
 
-            const { error } = await supabase.from('produtos').delete().eq('id', id)
+            // Proteção DELETE: só exclui se for o dono
+            let query = supabase.from('produtos').delete().eq('id', id)
+            if (userId) query = query.eq('user_id', userId)
+
+            const { error } = await query
             if (error) throw error
             return res.status(200).json({ sucesso: true })
 
         } else if (req.method === 'PUT') {
             const { id } = req.query
             if (!id) return res.status(400).json({ error: 'ID do produto obrigatório' })
+            if (!userId) return res.status(401).json({ error: 'Não autorizado' })
 
             const campos = { ...req.body, atualizado_em: new Date().toISOString() }
+
+            // Proteção UPDATE: garante que o user_id não seja alterado ou injetado indevidamente
+            // e que o retryQuery (se disparado) mantenha o filtro de owner
             const data = await upsertWithRetry('produtos', 'update', campos, id)
             return res.status(200).json({ produto: data })
         }

@@ -19,12 +19,22 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    // Gerar sourcemaps apenas em dev
+    sourcemap: mode === "development",
+    // Minificar agressivamente
+    minify: 'esbuild',
+    // CSS code split para carregar apenas o necessário
+    cssCodeSplit: true,
+    // Target moderno para bundles menores
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'ui-vendor': ['lucide-react', 'framer-motion', 'clsx', 'tailwind-merge'],
           'query-vendor': ['@tanstack/react-query', '@supabase/supabase-js'],
+          // Stripe separado — só carrega quando necessário (Lazy)
+          'stripe-vendor': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
         },
       },
     },

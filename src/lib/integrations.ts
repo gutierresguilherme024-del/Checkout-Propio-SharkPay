@@ -10,11 +10,15 @@ export interface IntegrationSettings {
 }
 
 export const integrationService = {
-    async getSettings(type: 'payment' | 'tracking' | 'n8n'): Promise<IntegrationSettings[]> {
-        const { data, error } = await supabase
+    async getSettings(type: 'payment' | 'tracking' | 'n8n', userId?: string): Promise<IntegrationSettings[]> {
+        let query = supabase
             .from('integrations')
             .select('*')
             .eq('type', type);
+
+        if (userId) query = query.eq('user_id', userId);
+
+        const { data, error } = await query;
 
         if (error) {
             console.warn(`Erro ao buscar integrações de ${type}, usando fallback local:`, error);
@@ -74,40 +78,45 @@ export const integrationService = {
         }
     },
 
-    async getGlobalSettings(): Promise<any | null> {
-        const { data, error } = await supabase
+    async getGlobalSettings(userId?: string): Promise<any | null> {
+        let query = supabase
             .from('integrations')
             .select('config')
-            .eq('id', 'checkout_global')
-            .single();
+            .eq('id', 'checkout_global');
+
+        if (userId) query = query.eq('user_id', userId);
+
+        const { data, error } = await query.maybeSingle();
 
         if (error) {
-            if (error.code !== 'PGRST116') { // Ignorar error de item não encontrado
-                console.warn("Erro ao buscar configurações globais:", error);
-            }
+            console.warn("Erro ao buscar configurações globais:", error);
             const local = localStorage.getItem('sco_global_settings');
             return local ? JSON.parse(local) : null;
         }
         return data?.config || null;
     },
 
-    async saveGlobalSettings(config: any): Promise<void> {
+    async saveGlobalSettings(config: any, userId?: string): Promise<void> {
+        const payload: any = {
+            id: 'checkout_global',
+            type: 'settings',
+            name: 'Configurações de Layout',
+            enabled: true,
+            config,
+            updated_at: new Date().toISOString()
+        };
+
+        if (userId) payload.user_id = userId;
+
         const { error } = await supabase
             .from('integrations')
-            .upsert({
-                id: 'checkout_global',
-                type: 'settings',
-                name: 'Configurações de Layout',
-                enabled: true,
-                config,
-                updated_at: new Date().toISOString()
-            } as any);
+            .upsert(payload);
 
         if (error) {
             console.warn("Erro ao salvar configurações no Supabase, salvando local:", error);
-            localStorage.setItem('sco_global_settings', JSON.stringify(config));
+            localStorage.setItem(`sco_global_settings_${userId || 'default'}`, JSON.stringify(config));
         } else {
-            localStorage.setItem('sco_global_settings', JSON.stringify(config));
+            localStorage.setItem(`sco_global_settings_${userId || 'default'}`, JSON.stringify(config));
         }
     }
 };

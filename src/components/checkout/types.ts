@@ -19,7 +19,7 @@ export const defaultCheckoutSettings: CheckoutSettings = {
   subheadline: "Pagamento seguro via Pix ou Cartão. Liberação automática após confirmação.",
   primaryHue: 190,
   timerEnabled: true,
-  timerDurationMinutes: 12,
+  timerDurationMinutes: 2,
   urgencyBarText: "Oferta ativa — preço pode mudar a qualquer momento",
   socialProofEnabled: true,
   socialProofText: "Mais de 2.300 compradores nos últimos 30 dias",

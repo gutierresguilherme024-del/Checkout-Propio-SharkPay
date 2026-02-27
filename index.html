@@ -4,47 +4,123 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Language" content="pt-BR" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- TODO: Set the document title to the name of your application -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
   <title>SharkPay Checkout</title>
-  <meta name="description" content="O melhor checkout para o seu negócio - SharkPay" />
+  <meta name="description" content="Checkout seguro e rápido - SharkPay" />
   <meta name="author" content="SharkPay" />
+  <meta name="theme-color" content="#020617" />
+  <meta name="color-scheme" content="dark light" />
 
-  <!-- TODO: Update og:title to match your application name -->
+  <!-- OG Tags -->
   <meta property="og:title" content="SharkPay Checkout" />
-  <meta property="og:description" content="Lovable Generated Project" />
+  <meta property="og:description" content="Checkout seguro e instantâneo para seu negócio digital" />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:site" content="@Lovable" />
-  <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+  <!-- Performance: DNS Prefetch + Preconnect -->
+  <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+  <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+  <link rel="dns-prefetch" href="https://js.stripe.com" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- Preconnect ao Supabase (a URL real será injetada pelo Vite) -->
+  <link rel="dns-prefetch" href="https://kbexelrcmyrqylssjfre.supabase.co" />
+  <link rel="preconnect" href="https://kbexelrcmyrqylssjfre.supabase.co" crossorigin />
+
+  <!-- Fonts com display=swap para não bloquear renderização -->
   <link
-    href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=Titan+One&family=Fredoka+One&display=swap"
-    rel="stylesheet" />
-  <!-- reCAPTCHA v3: ativado automaticamente se VITE_RECAPTCHA_SITE_KEY for setada no env -->
-  <!-- A chave é injetada aqui pelo Vite via index.html transform ou meta tag -->
+    href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet" />
+  </noscript>
+
+  <!-- Inline Critical CSS para renderização instantânea -->
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    :root {
+      --background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --primary: 190 95% 52%;
+      color-scheme: dark
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%
+    }
+
+    body {
+      font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+      background: hsl(var(--background));
+      color: hsl(var(--foreground));
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased
+    }
+
+    #root {
+      min-height: 100vh;
+      min-height: 100dvh
+    }
+
+    .sco-page {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .startup-loader {
+      display: flex;
+      height: 100vh;
+      height: 100dvh;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      color: #06b6d4;
+      font-family: system-ui, sans-serif
+    }
+
+    .startup-spinner {
+      width: 24px;
+      height: 24px;
+      border: 2px solid rgba(6, 182, 212, 0.2);
+      border-top-color: #06b6d4;
+      border-radius: 50%;
+      animation: spin .6s linear infinite
+    }
+  </style>
 </head>
 
 <body>
   <div id="root">
-    <div
-      style="display: flex; height: 100vh; width: 100vw; align-items: center; justify-content: center; background: #020617; color: #06b6d4; font-family: sans-serif;">
-      <div style="text-align: center;">
-        <h2 style="margin-bottom: 10px;">SharkPay</h2>
-        <p style="font-size: 14px; opacity: 0.7;">Carregando sistema...</p>
+    <div class="startup-loader">
+      <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px">
+        <div class="startup-spinner"></div>
+        <p style="font-size:13px;opacity:0.6">Carregando...</p>
       </div>
     </div>
   </div>
   <script>
-    // Forçar idioma pt-BR silenciosamente (cookies + localStorage)
-    document.cookie='locale=pt-BR;path=/;max-age=31536000;SameSite=Lax';
-    document.cookie='language=pt-BR;path=/;max-age=31536000;SameSite=Lax';
-    document.cookie='lang=pt_BR;path=/;max-age=31536000;SameSite=Lax';
-    document.cookie='preferred_language=pt-BR;path=/;max-age=31536000;SameSite=Lax';
-    try{localStorage.setItem('locale','pt-BR');localStorage.setItem('language','pt-BR');}catch(e){}
+    // Forçar idioma pt-BR
+    document.cookie = 'locale=pt-BR;path=/;max-age=31536000;SameSite=Lax';
+    try { localStorage.setItem('locale', 'pt-BR'); } catch (e) { }
   </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>

@@ -51,9 +51,13 @@ export default function AdminOverview() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data, error } = await supabase
         .from('pedidos')
         .select('*')
+        .eq('user_id', user.id)
         .order('criado_em', { ascending: false });
 
       if (error) throw error;

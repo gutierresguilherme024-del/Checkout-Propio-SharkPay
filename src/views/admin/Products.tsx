@@ -9,6 +9,7 @@ import { Plus, Trash2, Pencil, Save, X, Search, Package, Eye, Power, FileText, C
 import { normalizeImageUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { useIntegrations } from "@/hooks/use-integrations";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Product {
     id: string;
@@ -196,12 +197,14 @@ function gerarSlugLocal(nome: string): string {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        .substring(0, 40);
-    const sufixo = Math.random().toString(36).substring(2, 6);
+        .substring(0, 30);
+    // Sufixo maior para evitar colisões no ambiente SaaS (8 caracteres)
+    const sufixo = Math.random().toString(36).substring(2, 10);
     return `${base}-${sufixo}`;
 }
 
 export default function AdminProducts() {
+    const { session } = useAuth();
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
@@ -350,6 +353,8 @@ export default function AdminProducts() {
                     stripe_enabled: stripeEnabled,
                     pushinpay_enabled: pushinpayEnabled,
                     mundpay_enabled: mundpayEnabled,
+                    // @ts-ignore - campo será adicionado via migração SaaS
+                    user_id: session?.user?.id || null
                 });
 
                 const checkoutLink = getCheckoutUrl(produtoSalvo.checkout_slug);

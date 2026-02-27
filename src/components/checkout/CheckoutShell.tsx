@@ -131,7 +131,7 @@ function StripeCardForm({
   isProcessing,
   setIsProcessing
 }: {
-  onSuccess: () => void;
+  onSuccess: (id?: string) => void;
   amount: number;
   payload: any;
   isProcessing: boolean;
@@ -173,7 +173,7 @@ function StripeCardForm({
 
       if (paymentIntent.status === 'succeeded') {
         toast.success("Pagamento confirmado!", { id: toastId });
-        onSuccess();
+        onSuccess(data.pedido_id);
       } else {
         throw new Error("Pagamento não concluído. Status: " + paymentIntent.status);
       }
@@ -454,28 +454,36 @@ export function CheckoutShell({
   const [mundpayCheckoutUrl, setMundpayCheckoutUrl] = useState<string | null>(null);
   const [mundpayPago, setMundpayPago] = useState(false);
 
-  // Polling do status do pedido MundPay no Supabase
+  // Polling unificado (MundPay ou PushinPay)
   useEffect(() => {
-    if (!mundpayPedidoId || !mundpayPending) return;
+    const idParaPolling = mundpayPedidoId || (localPixData as any)?.pedido_id;
+    if (!idParaPolling || (!mundpayPending && !pixOpen)) return;
 
     const interval = setInterval(async () => {
       try {
         const { data } = await supabase
           .from('pedidos')
           .select('status')
-          .eq('id', mundpayPedidoId)
+          .eq('id', idParaPolling)
           .single();
 
         if (data?.status === 'pago') {
+          clearInterval(interval);
           setMundpayPago(true);
           setMundpayPending(false);
-          toast.success("✅ Pagamento MundPay confirmado!");
+          setPixOpen(false);
+          toast.success("✅ Pagamento confirmado!");
+
+          const slug = window.location.pathname.split('/checkout/')[1] || '';
+          setTimeout(() => {
+            window.location.href = `/sucesso?pedido=${idParaPolling}&slug=${slug}`;
+          }, 1000);
         }
       } catch { /* ignora erros de polling */ }
-    }, 4000); // Poll a cada 4s
+    }, 4000);
 
     return () => clearInterval(interval);
-  }, [mundpayPedidoId, mundpayPending]);
+  }, [mundpayPedidoId, mundpayPending, localPixData, pixOpen]);
 
   // ── Auto-switch de método: só roda UMA VEZ após carregar integrações ──
   useEffect(() => {
@@ -587,7 +595,12 @@ export function CheckoutShell({
         } else {
           // PushinPay retorna QR code — fechar popup vazio se existir
           if (mundpayPopup && !mundpayPopup.closed) mundpayPopup.close();
-          setLocalPixData({ qr_code: data.qr_code, qr_code_text: data.qr_code_text, expires_at: data.expires_at });
+          setLocalPixData({
+            qr_code: data.qr_code,
+            qr_code_text: data.qr_code_text,
+            expires_at: data.expires_at,
+            pedido_id: data.pedido_id
+          } as any);
           setPixOpen(true);
           onPaySuccess?.(data);
         }
@@ -804,9 +817,9 @@ export function CheckoutShell({
                         utm_source: JSON.parse(sessionStorage.getItem("checkoutcore:utms") || "{}").utm_source || null,
                         gateway: 'stripe'
                       }}
-                      onSuccess={() => {
+                      onSuccess={(id) => {
                         const slug = window.location.pathname.split('/checkout/')[1] || '';
-                        window.location.href = `/sucesso?pedido_id=${Date.now()}&slug=${slug}`;
+                        window.location.href = `/sucesso?pedido=${id || 'err'}&slug=${slug}`;
                       }}
                     />
                   </Elements>
