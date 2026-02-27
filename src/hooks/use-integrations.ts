@@ -47,7 +47,7 @@ export function useIntegrations() {
         if (!item.enabled) return "inactive";
 
         // Regras de validação baseadas em regras-limitadas/limitaçoes.md
-        if (id === 'utmify') return (item.config.apiKey || item.config.utmScript || item.config.webhookUrl) ? "active" : "pending";
+        if (id === 'utmify') return (item.config.apiKey || item.config.utmScript || item.config.pixelId) ? "active" : "pending";
         if (id === 'stripe') {
             const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
             const hasKeys = (item.config.pubKey && item.config.secKey);

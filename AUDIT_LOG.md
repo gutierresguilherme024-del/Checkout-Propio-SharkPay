@@ -1,13 +1,13 @@
 # Auditoria Contínua - SharkPay Checkout
 
-## [v1.4.0] - 2026-02-27
-### Integração UTMify Nativa
-**Resumo:** O rastreamento via UTMify foi totalmente integrado ao frontend e aos painéis de administração.
-- **Configuração:** Adicionados campos "Webhook URL (Postback)" e "Script UTMify (Header)" no painel Administrativo -> Rastreamento, permitindo salvar o script sem depender do n8n (botão de teste removido).
-- **Injeção Dinâmica:** O script UTMify configurado é agora automaticamente injetado via DOM no `<head>` de todos os checkouts (existentes e novos).
-- **Hook Atualizado:** A verificação de status no sistema agora aprova a integração como "Ativa" caso qualquer um dos campos (API, Script ou Webhook) esteja preenchido.
+## [v1.5.0] - 2026-02-27
+### Simplificação UTMify & Status Sidebar
+**Resumo:** Ajuste fino na integração UTMify para facilitar a configuração pelo usuário.
+- **Simplificação:** Removido o campo "Webhook URL" da configuração, mantendo apenas API Key, Pixel ID e Script. A ativação agora depende apenas do preenchimento de um desses campos e da chave "Ativo".
+- **Feedback Visual:** Implementada lógica dinâmica no sidebar para exibir o badge "Ativo" em tempo real assim que o UTMify é configurado e ativado.
+- **Deploy Automático:** Integração validada e enviada para produção.
 
-## [v1.3.0] - 2026-02-26
+## [v1.4.0] - 2026-02-27
 ### Auditoria Final & Correção Estrutural SaaS
 **Resumo:** Realizada uma auditoria completa com foco em isolamento de dados entre usuários (Multi-tenancy), atribuição correta de faturamento e fluxo de sucesso do cliente.
 

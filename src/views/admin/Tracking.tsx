@@ -53,7 +53,6 @@ const TRACKING_INTEGRATIONS = [
 export default function AdminTracking() {
   const [apiKey, setApiKey] = useState("");
   const [pixelId, setPixelId] = useState("");
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [utmScript, setUtmScript] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [configOpen, setConfigOpen] = useState(false);
@@ -72,7 +71,6 @@ export default function AdminTracking() {
       if (utmify) {
         setApiKey(String(utmify.config.apiKey || ""));
         setPixelId(String(utmify.config.pixelId || ""));
-        setWebhookUrl(String(utmify.config.webhookUrl || ""));
         setUtmScript(String(utmify.config.utmScript || ""));
         setEnabled(utmify.enabled);
       }
@@ -83,9 +81,9 @@ export default function AdminTracking() {
 
   const connection = useMemo(() => {
     if (!enabled) return { label: "Inativo", tone: "secondary" as const };
-    if (apiKey || pixelId || webhookUrl || utmScript) return { label: "Conectado", tone: "default" as const };
+    if (apiKey || pixelId || utmScript) return { label: "Conectado", tone: "default" as const };
     return { label: "Configuração incompleta", tone: "secondary" as const };
-  }, [enabled, apiKey, pixelId, webhookUrl, utmScript]);
+  }, [enabled, apiKey, pixelId, utmScript]);
 
   const isConnected = connection.label === "Conectado";
 
@@ -95,7 +93,7 @@ export default function AdminTracking() {
       type: 'tracking',
       name: 'UTMify',
       enabled,
-      config: { apiKey, pixelId, webhookUrl, utmScript }
+      config: { apiKey, pixelId, utmScript }
     });
     toast.success("Configurações do UTMify salvas com sucesso!");
   };
@@ -174,15 +172,6 @@ export default function AdminTracking() {
                 onChange={(e) => setPixelId(e.target.value)}
                 placeholder="pix_123"
               />
-            </div>
-            <div className="grid gap-2 md:col-span-2">
-              <Label>Webhook URL (Postback)</Label>
-              <Input
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                placeholder="https://tracker.utmify.com.br/webhook/..."
-              />
-              <p className="text-xs text-muted-foreground">URL para onde enviaremos eventos de venda.</p>
             </div>
             <div className="grid gap-2 md:col-span-2">
               <Label>Script UTMify (Header)</Label>
