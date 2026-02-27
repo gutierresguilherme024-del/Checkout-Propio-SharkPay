@@ -173,6 +173,13 @@ function StripeCardForm({
 
       if (paymentIntent.status === 'succeeded') {
         toast.success("Pagamento confirmado!", { id: toastId });
+        // Disparar evento de compra no UTMify
+        (window as any).utmify?.send?.('Purchase', {
+          email: payload.email,
+          name: payload.nome,
+          value: amount,
+          pedido_id: data.pedido_id
+        });
         onSuccess(data.pedido_id);
       } else {
         throw new Error("Pagamento não concluído. Status: " + paymentIntent.status);
@@ -438,6 +445,9 @@ export function CheckoutShell({
     };
   }, [product, settings.headline]);
 
+  const amount = displayProduct.price;
+  const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
+
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -447,7 +457,6 @@ export function CheckoutShell({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pixOpen, setPixOpen] = useState(false);
   const [localPixData, setLocalPixData] = useState<{ qr_code?: string; qr_code_text?: string; expires_at?: string } | null>(null);
-
   // MundPay — popup + polling
   const [mundpayPending, setMundpayPending] = useState(false);
   const [mundpayPedidoId, setMundpayPedidoId] = useState<string | null>(null);
@@ -474,6 +483,12 @@ export function CheckoutShell({
           setPixOpen(false);
           toast.success("✅ Pagamento confirmado!");
 
+          // Disparar evento de compra no UTMify
+          (window as any).utmify?.send?.('Purchase', {
+            value: amount,
+            pedido_id: idParaPolling
+          });
+
           const slug = window.location.pathname.split('/checkout/')[1] || '';
           setTimeout(() => {
             window.location.href = `/sucesso?pedido=${idParaPolling}&slug=${slug}`;
@@ -498,8 +513,33 @@ export function CheckoutShell({
     }
   }, [isStripeActive, isPushinPayActive, isMundPayActive, loading]);
 
-  const amount = displayProduct.price;
-  const { mm, ss, done } = useCountdown(settings.timerDurationMinutes, settings.timerEnabled);
+  // ── Auto-switch de método: só roda UMA VEZ após carregar integrações ──
+
+  const [hasTrackedInitiate, setHasTrackedInitiate] = useState(false);
+
+  // Helper para disparar eventos para o UTMify/Tracking
+  const fireTrackingEvent = useCallback((eventName: string, extra: any = {}) => {
+    // 1. Tentar via UTMify (objeto global injetado pelo script)
+    const utmify = (window as any).utmify;
+    if (utmify && typeof utmify.send === 'function') {
+      console.log(`[Tracking] Enviando ${eventName} para UTMify...`);
+      utmify.send(eventName, {
+        email,
+        phone,
+        name,
+        value: amount,
+        ...extra
+      });
+    }
+  }, [email, phone, name, amount]);
+
+  // Disparar "InitiateCheckout" quando o usuário começa a interagir com o formulário
+  useEffect(() => {
+    if (!hasTrackedInitiate && (name.length > 3 || email.length > 3)) {
+      fireTrackingEvent('InitiateCheckout');
+      setHasTrackedInitiate(true);
+    }
+  }, [name, email, hasTrackedInitiate, fireTrackingEvent]);
 
   useEffect(() => {
     if (mode !== "public") return;
