@@ -1,5 +1,12 @@
 # Auditoria Contínua - SharkPay Checkout
 
+## [v1.7.0] - 2026-02-27
+### Personalização Mobile: Ícones PWA & Favicons
+**Resumo:** Atualização visual da aplicação quando instalada em dispositivos móveis.
+- **Ícones Home Screen:** Implementação de suporte PWA (manifest.json) com ícones de alta resolução da pasta Front-icons-favicons.
+- **Apple Touch Icon:** Configuração específica para garantir que a marca SharkPay apareça perfeitamente no iOS (iPhone/iPad).
+- **Favicon Dinâmico:** Atualização do ícone da aba do navegador para maior consistência visual.
+
 ## [v1.6.0] - 2026-02-27
 ### Rastreamento Avançado UTMify
 **Resumo:** Implementação de eventos automáticos de funil para o UTMify.

@@ -21,6 +21,20 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '1.7.0',
+        name: 'Personalização Mobile: Ícones PWA & Favicons',
+        keywords: ['PWA', 'Favicon', 'Mobile-UX', 'Home-Screen'],
+        type: 'funcionalidade',
+        status: 'concluido',
+    },
+    {
+        version: '1.6.1',
+        name: 'Check de Confiabilidade: UTMify 100% Tracking',
+        keywords: ['Validação', 'Tracking', 'InitiateCheckout', 'Purchase'],
+        type: 'performance',
+        status: 'concluido',
+    },
+    {
         version: '1.6.0',
         name: 'Rastreamento Avançado: UTMify Full-Funnel',
         keywords: ['InitiateCheckout', 'Purchase', 'Automação'],
