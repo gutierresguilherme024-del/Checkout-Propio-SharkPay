@@ -21,6 +21,27 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '1.6.0',
+        name: 'Rastreamento Avançado: UTMify Full-Funnel',
+        keywords: ['InitiateCheckout', 'Purchase', 'Automação'],
+        type: 'funcionalidade',
+        status: 'concluido',
+    },
+    {
+        version: '1.5.0',
+        name: 'Simplificação UTMify & Feedback Visual',
+        keywords: ['UX', 'Sidebar-Status', 'Config-Simple'],
+        type: 'performance',
+        status: 'concluido',
+    },
+    {
+        version: '1.4.0',
+        name: 'Integração Nativa: UTMify Tracking',
+        keywords: ['Pixel', 'Script-Injection', 'Tracking'],
+        type: 'funcionalidade',
+        status: 'concluido',
+    },
+    {
         version: '1.3.3',
         name: 'Persistência Global: Editor de Checkout SaaS',
         keywords: ['SaaS-Isolation', 'Conversão', 'GlobalSettings'],
