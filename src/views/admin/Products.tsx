@@ -755,53 +755,45 @@ export default function AdminProducts() {
                                     )}
 
                                     {/* Gateways Ativos - DEMONSTRADOR PREMIUM (Inspirado em front-produtos) */}
-                                    <div className="mt-5 pt-4 border-t border-border/40 relative group/gateways">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-1.5 px-2 py-0.5 bg-muted/30 rounded-md border border-border/50">
-                                                    <Zap className="size-3 text-yellow-500" /> Gatways Ativos
+                                    <div className="mt-5 pt-4 border-t border-border/40">
+                                        <div className="flex flex-col gap-3">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00c2ff]/80">Métodos de Pgto.</span>
+
+                                            <div className="flex items-center gap-4">
+                                                {/* Pix Icon (PushinPay ou MundPay) */}
+                                                {(product.pushinpay_enabled || product.mundpay_enabled) ? (
+                                                    <div className="flex items-center gap-1.5 group/pix" title={product.pushinpay_enabled ? "Pix via PushinPay" : "Pix via MundPay"}>
+                                                        <div className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white transition-all group-hover:border-primary/50 group-hover:bg-primary/10">
+                                                            <Zap className="size-4 fill-primary text-primary" />
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-muted-foreground group-hover:text-foreground transition-colors">PIX</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-muted-foreground/20 opacity-40 grayscale" title="Pix Desativado">
+                                                        <Zap className="size-4" />
+                                                    </div>
+                                                )}
+
+                                                {/* Card Icon (Stripe) */}
+                                                {product.stripe_enabled ? (
+                                                    <div className="flex items-center gap-1.5 group/card" title="Cartão de Crédito via Stripe">
+                                                        <div className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white transition-all group-hover:border-blue-500/50 group-hover:bg-blue-500/10">
+                                                            <CreditCard className="size-4 fill-blue-500 text-blue-500" />
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-muted-foreground group-hover:text-foreground transition-colors">CARD</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-muted-foreground/20 opacity-40 grayscale" title="Cartão Desativado">
+                                                        <CreditCard className="size-4" />
+                                                    </div>
+                                                )}
+
+                                                {/* Badge de Status Extra */}
+                                                <div className="ml-auto">
+                                                    <div className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[9px] font-black text-white/50 uppercase tracking-tighter">
+                                                        {product.ativo ? "Verificado" : "Off-line"}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-wrap gap-2.5">
-                                            {/* Badge Stripe */}
-                                            <div
-                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.stripe_enabled
-                                                    ? 'bg-gradient-to-r from-[#635BFF]/10 to-[#635BFF]/5 border-[#635BFF]/30 text-[#635BFF] shadow-sm shadow-[#635BFF]/5'
-                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
-                                                    }`}
-                                                title={product.stripe_enabled ? "Cartão de Crédito Ativo" : "Cartão de Crédito Inativo"}
-                                            >
-                                                <CreditCard className={`size-3.5 transition-transform duration-300 ${product.stripe_enabled ? 'scale-110' : ''}`} />
-                                                <span className="text-[11px] font-extrabold tracking-tight">STRIPE</span>
-                                                {product.stripe_enabled && <div className="size-1 rounded-full bg-[#635BFF] animate-pulse ml-0.5" />}
-                                            </div>
-
-                                            {/* Badge PushinPay (Pix) */}
-                                            <div
-                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.pushinpay_enabled
-                                                    ? 'bg-gradient-to-r from-purple-500/10 to-purple-600/5 border-purple-500/30 text-purple-600 shadow-sm shadow-purple-500/5'
-                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
-                                                    }`}
-                                                title={product.pushinpay_enabled ? "Pix PushinPay Ativo" : "Pix PushinPay Inativo"}
-                                            >
-                                                <Zap className={`size-3.5 transition-transform duration-300 ${product.pushinpay_enabled ? 'scale-110' : ''}`} />
-                                                <span className="text-[11px] font-extrabold tracking-tight uppercase">PushinPay (Pix)</span>
-                                                {product.pushinpay_enabled && <div className="size-1 rounded-full bg-purple-500 animate-pulse ml-0.5" />}
-                                            </div>
-
-                                            {/* Badge MundPay (Popup) */}
-                                            <div
-                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-300 ${product.mundpay_enabled
-                                                    ? 'bg-gradient-to-r from-emerald-500/10 to-teal-500/5 border-emerald-500/30 text-emerald-600 shadow-sm shadow-emerald-500/5'
-                                                    : 'bg-muted/10 border-border/40 text-muted-foreground/30 opacity-40 grayscale hover:opacity-100 hover:grayscale-0'
-                                                    }`}
-                                                title={product.mundpay_enabled ? "MundPay (Pix) Ativo" : "MundPay (Pix) Inativo"}
-                                            >
-                                                <ExternalLink className={`size-3.5 transition-transform duration-300 ${product.mundpay_enabled ? 'scale-110' : ''}`} />
-                                                <span className="text-[11px] font-extrabold tracking-tight uppercase">MundPay (Pix)</span>
-                                                {product.mundpay_enabled && <div className="size-1 rounded-full bg-emerald-500 animate-pulse ml-0.5" />}
                                             </div>
                                         </div>
                                     </div>

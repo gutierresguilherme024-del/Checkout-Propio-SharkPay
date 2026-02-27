@@ -21,6 +21,13 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '1.8.0',
+        name: 'Otimização Mobile Premium & Sidebar Responsiva',
+        keywords: ['Mobile-UX', 'Sidebar-Hover', 'Smart-Keyboard', 'Responsive-Layout', 'Product-Card-UI'],
+        type: 'performance',
+        status: 'concluido',
+    },
+    {
         version: '1.7.0',
         name: 'Personalização Mobile: Ícones PWA & Favicons',
         keywords: ['PWA', 'Favicon', 'Mobile-UX', 'Home-Screen'],

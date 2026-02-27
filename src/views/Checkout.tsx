@@ -142,11 +142,22 @@ export default function PublicCheckout() {
               if (scriptString.trim() && !document.getElementById('utmify-script')) {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = scriptString;
+
+                // Limpar scripts injetados anteriormente para evitar duplicatas
+                document.querySelectorAll('.utmify-injected').forEach(el => el.remove());
+
                 Array.from(tempDiv.childNodes).forEach(node => {
-                  if (node.nodeType === Node.ELEMENT_NODE) {
-                    const clonedNode = (node as Element).cloneNode(true) as Element;
-                    clonedNode.id = 'utmify-script';
-                    document.head.appendChild(clonedNode);
+                  if (node.nodeName === 'SCRIPT') {
+                    const script = document.createElement('script');
+                    const original = node as HTMLScriptElement;
+                    Array.from(original.attributes).forEach(attr => script.setAttribute(attr.name, attr.value));
+                    script.textContent = original.textContent;
+                    script.classList.add('utmify-injected');
+                    document.head.appendChild(script);
+                  } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    const cloned = node.cloneNode(true) as Element;
+                    if (cloned instanceof HTMLElement) cloned.classList.add('utmify-injected');
+                    document.head.appendChild(cloned);
                   }
                 });
               }

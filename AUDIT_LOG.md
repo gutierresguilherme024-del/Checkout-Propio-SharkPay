@@ -1,5 +1,12 @@
 # Auditoria Contínua - SharkPay Checkout
 
+## [v1.8.0] - 2027-02-27
+### Otimização Mobile Premium & Sidebar Responsiva
+**Resumo:** Otimização completa da experiência mobile em todo o ecossistema (Checkout e Admin).
+- **Mobile UX:** Implementação de tipografia fluida, teclados numéricos inteligentes (CPF/Tel) e prevenção de zoom indesejado no mobile.
+- **Sidebar Admin:** Novo sistema de hover para desktop e trigger/header fixo para mobile, garantindo funcionalidade total em qualquer tela.
+- **Performance:** Refestelamento de lazy loading e otimização de renderização crítica no index.html.
+
 ## [v1.7.0] - 2026-02-27
 ### Personalização Mobile: Ícones PWA & Favicons
 **Resumo:** Atualização visual da aplicação quando instalada em dispositivos móveis.

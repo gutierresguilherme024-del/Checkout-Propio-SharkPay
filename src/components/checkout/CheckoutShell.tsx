@@ -519,27 +519,39 @@ export function CheckoutShell({
 
   // Helper para disparar eventos para o UTMify/Tracking
   const fireTrackingEvent = useCallback((eventName: string, extra: any = {}) => {
-    // 1. Tentar via UTMify (objeto global injetado pelo script)
+    const trackingData = {
+      email,
+      phone,
+      name,
+      value: amount,
+      currency: 'BRL',
+      ...extra
+    };
+
+    console.log(`[Tracking] Disparando ${eventName}:`, trackingData);
+
+    // 1. Tentar via UTMify
     const utmify = (window as any).utmify;
-    if (utmify && typeof utmify.send === 'function') {
-      console.log(`[Tracking] Enviando ${eventName} para UTMify...`);
-      utmify.send(eventName, {
-        email,
-        phone,
-        name,
-        value: amount,
-        ...extra
-      });
+    if (typeof utmify === 'function') {
+      utmify(eventName, trackingData);
+    } else if (utmify?.send) {
+      utmify.send(eventName, trackingData);
+    }
+
+    // 2. Tentar via Facebook Pixel (fbq) - UTMify costuma injetar ele
+    const fbq = (window as any).fbq;
+    if (typeof fbq === 'function') {
+      fbq('track', eventName, trackingData);
     }
   }, [email, phone, name, amount]);
 
-  // Disparar "InitiateCheckout" quando o usuário começa a interagir com o formulário
+  // Disparar "InitiateCheckout" assim que o usuário começar a preencher qualquer campo
   useEffect(() => {
-    if (!hasTrackedInitiate && (name.length > 3 || email.length > 3)) {
+    if (!hasTrackedInitiate && (name.trim().length > 0 || email.trim().length > 0 || phone.trim().length > 0)) {
       fireTrackingEvent('InitiateCheckout');
       setHasTrackedInitiate(true);
     }
-  }, [name, email, hasTrackedInitiate, fireTrackingEvent]);
+  }, [name, email, phone, hasTrackedInitiate, fireTrackingEvent]);
 
   useEffect(() => {
     if (mode !== "public") return;
