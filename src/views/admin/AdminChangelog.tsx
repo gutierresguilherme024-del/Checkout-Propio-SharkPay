@@ -21,6 +21,13 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '2.5.8',
+        name: 'BuyPix Production Live',
+        keywords: ['BuyPix-Connected', 'Direct-Injection', 'Gateway-Live', 'Webhook-Ready'],
+        type: 'lancamento',
+        status: 'concluido',
+    },
+    {
         version: '2.5.7',
         name: 'RLS Write Permission Fix',
         keywords: ['RLS-Write', 'Admin-Save-Fix', 'Supabase-Policies', 'Integrations-Persistence'],

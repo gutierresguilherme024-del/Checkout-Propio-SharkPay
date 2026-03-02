@@ -83,9 +83,18 @@ GRANT ALL ON TABLE public.integrations TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.produtos TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.pedidos TO anon, authenticated, service_role;
 
--- 10. INCIALIZAR REGISTRO GLOBAL SE NÃO EXISTIR
+-- 10. INCIALIZAR REGISTRO GLOBAL COM CREDENCIAIS REAIS
 INSERT INTO public.integrations (id, type, name, enabled, config)
-VALUES ('buypix', 'payment', 'BuyPix', false, '{"buypix_api_key": "", "buypix_webhook_secret": ""}')
-ON CONFLICT (id, user_id) DO NOTHING;
+VALUES (
+    'buypix', 
+    'payment', 
+    'BuyPix', 
+    true, -- Já deixa ativado
+    '{"buypix_api_key": "bpx_sVXfxDNUaWqErFSnx6xxczbKrc6KvqlItC1v43f6", "buypix_webhook_secret": "whsec_buypix_default"}'
+)
+ON CONFLICT (id, user_id) 
+DO UPDATE SET 
+    config = EXCLUDED.config,
+    enabled = true;
 
--- ✅ Script v2.5.7 executado! (Reparo de Escrita RLS)
+-- ✅ Script v2.5.8 executado! (BuyPix Live & Connected)
