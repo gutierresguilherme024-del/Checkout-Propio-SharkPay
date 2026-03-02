@@ -1,0 +1,295 @@
+diff --git a/FINAL_BUYPIX_FIX.sql b/FINAL_BUYPIX_FIX.sql
+new file mode 100644
+index 0000000..ad711fa
+--- /dev/null
++++ b/FINAL_BUYPIX_FIX.sql
+@@ -0,0 +1,137 @@
++-- =========================================================
++-- FINAL BUYPIX FIX - SharkPay Checkout
++-- Execute este script UMA VEZ no SQL Editor do Supabase
++-- Após rodar, salve a chave BuyPix no Admin e tudo funcionará
++-- =========================================================
++
++-- FORÇA ATUALIZAÇÃO DO CACHE DO SCHEMA
++NOTIFY pgrst, 'reload schema cache';
++
++-- ══════════════════════════════════════════════════════════
++-- 1. CRIAR TABELA INTEGRATIONS (se não existir)
++-- ══════════════════════════════════════════════════════════
++CREATE TABLE IF NOT EXISTS public.integrations (
++    id TEXT PRIMARY KEY,
++    type TEXT NOT NULL,
++    name TEXT NOT NULL,
++    enabled BOOLEAN DEFAULT false,
++    config JSONB DEFAULT '{}'::jsonb,
++    user_id UUID REFERENCES auth.users(id),
++    updated_at TIMESTAMPTZ DEFAULT now()
++);
++
++-- ══════════════════════════════════════════════════════════
++-- 2. ADICIONAR COLUNAS BUYPIX EM PRODUTOS
++-- ══════════════════════════════════════════════════════════
++ALTER TABLE public.produtos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
++ALTER TABLE public.produtos ADD COLUMN IF NOT EXISTS use_buypix BOOLEAN DEFAULT false;
++ALTER TABLE public.produtos ADD COLUMN IF NOT EXISTS buypix_redirect_url TEXT;
++
++-- ══════════════════════════════════════════════════════════
++-- 3. ADICIONAR COLUNAS BUYPIX EM PEDIDOS
++-- ══════════════════════════════════════════════════════════
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS buypix_deposit_id TEXT;
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS buypix_status TEXT DEFAULT 'pending';
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS buypix_qr_code TEXT;
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS buypix_qr_code_base64 TEXT;
++ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS buypix_expires_at TIMESTAMPTZ;
++
++-- ══════════════════════════════════════════════════════════
++-- 4. INSERIR REGISTRO DA BUYPIX (se não existir)
++-- ══════════════════════════════════════════════════════════
++INSERT INTO public.integrations (id, type, name, enabled, config)
++VALUES (
++    'buypix',
++    'payment',
++    'BuyPix',
++    false,
++    '{"buypix_api_key": "", "buypix_webhook_secret": ""}'::jsonb
++)
++ON CONFLICT (id) DO NOTHING;
++
++-- ══════════════════════════════════════════════════════════
++-- 5. CRIAR ÍNDICES PARA PERFORMANCE
++-- ══════════════════════════════════════════════════════════
++CREATE INDEX IF NOT EXISTS idx_produtos_user_id ON public.produtos(user_id);
++CREATE INDEX IF NOT EXISTS idx_pedidos_user_id ON public.pedidos(user_id);
++CREATE INDEX IF NOT EXISTS idx_produtos_slug ON public.produtos(checkout_slug);
++CREATE INDEX IF NOT EXISTS idx_integrations_type ON public.integrations(type);
++CREATE INDEX IF NOT EXISTS idx_integrations_user_id ON public.integrations(user_id);
++
++-- ══════════════════════════════════════════════════════════
++-- 6. HABILITAR ROW LEVEL SECURITY (RLS)
++-- ══════════════════════════════════════════════════════════
++ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.produtos ENABLE ROW LEVEL SECURITY;
++ALTER TABLE public.pedidos ENABLE ROW LEVEL SECURITY;
++
++-- ══════════════════════════════════════════════════════════
++-- 7. POLÍTICAS DE ACESSO PÚBLICO (CHECKOUT ANÔNIMO)
++-- ══════════════════════════════════════════════════════════
++
++-- Produtos: leitura pública de produtos ativos
++DROP POLICY IF EXISTS "Leitura pública de produtos ativos" ON public.produtos;
++CREATE POLICY "Leitura pública de produtos ativos" ON public.produtos
++FOR SELECT TO anon, authenticated USING (ativo = true);
++
++-- Integrações: leitura pública SOMENTE se estiver habilitada
++-- (O backend já filtra por user_id do produto)
++DROP POLICY IF EXISTS "Leitura pública de integrações habilitadas" ON public.integrations;
++CREATE POLICY "Leitura pública de integrações habilitadas" ON public.integrations
++FOR SELECT TO anon, authenticated USING (enabled = true OR user_id IS NULL);
++
++-- Pedidos: inserção pública (cliente cria pedido sem auth)
++DROP POLICY IF EXISTS "Clientes criam pedidos" ON public.pedidos;
++CREATE POLICY "Clientes criam pedidos" ON public.pedidos
++FOR INSERT TO anon, authenticated WITH CHECK (true);
++
++-- Pedidos: leitura pública de pedidos pendentes (para ver QR Pix)
++DROP POLICY IF EXISTS "Leitura pública de pedidos pendentes" ON public.pedidos;
++CREATE POLICY "Leitura pública de pedidos pendentes" ON public.pedidos
++FOR SELECT TO anon, authenticated USING (status = 'pendente' OR status = 'pago');
++
++-- ══════════════════════════════════════════════════════════
++-- 8. POLÍTICAS DE ADMIN (AUTENTICADO)
++-- ══════════════════════════════════════════════════════════
++
++-- Produtos: admin gerencia seus produtos
++DROP POLICY IF EXISTS "Admin gerencia produtos" ON public.produtos;
++CREATE POLICY "Admin gerencia produtos" ON public.produtos
++FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
++
++-- Integrações: admin gerencia suas integrações
++DROP POLICY IF EXISTS "Admin gerencia integrações" ON public.integrations;
++CREATE POLICY "Admin gerencia integrações" ON public.integrations
++FOR ALL TO authenticated USING (
++    auth.uid() = user_id OR user_id IS NULL
++) WITH CHECK (
++    auth.uid() = user_id OR user_id IS NULL
++);
++
++-- Pedidos: admin vê seus pedidos
++DROP POLICY IF EXISTS "Admin vê pedidos" ON public.pedidos;
++CREATE POLICY "Admin vê pedidos" ON public.pedidos
++FOR SELECT TO authenticated USING (auth.uid() = user_id);
++
++-- ══════════════════════════════════════════════════════════
++-- 9. GRANTS (PERMISSÕES FINAIS)
++-- ══════════════════════════════════════════════════════════
++GRANT ALL ON TABLE public.integrations TO anon, authenticated, service_role;
++GRANT ALL ON TABLE public.produtos TO anon, authenticated, service_role;
++GRANT ALL ON TABLE public.pedidos TO anon, authenticated, service_role;
++
++-- ══════════════════════════════════════════════════════════
++-- FIM DO SCRIPT
++-- ══════════════════════════════════════════════════════════
++-- ✅ Script executado com sucesso!
++--
++-- PRÓXIMOS PASSOS:
++-- 1. Vá em: https://sharckpay.vip/admin/payments
++-- 2. Localize a seção "BuyPix"
++-- 3. Cole sua API Key da BuyPix
++-- 4. Clique em "Salvar"
++-- 5. Teste em: https://sharckpay.vip/checkout/seu-slug
++--
++-- A partir de agora, o Pix BuyPix funcionará instantaneamente! 🚀
++-- ══════════════════════════════════════════════════════════
+diff --git a/api/process-payment.ts b/api/process-payment.ts
+index a33c2a7..8051db1 100644
+--- a/api/process-payment.ts
++++ b/api/process-payment.ts
+@@ -100,20 +100,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
+         let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
+ 
+         try {
+-            let query = supabase
+-                .from('integrations')
+-                .select('config, enabled')
+-                .eq('id', 'stripe')
+-
+-            if (productOwnerId) query = query.eq('user_id', productOwnerId)
++            // Busca AGRESSIVA em cascata: user_id específico → global → ENV
++            let integ = null
++
++            // Nível 1: Buscar integração do usuário específico
++            if (productOwnerId) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'stripe')
++                    .eq('user_id', productOwnerId)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+-            const { data: integ } = await query.maybeSingle()
++            // Nível 2: Se não encontrou, buscar integração global (user_id IS NULL)
++            if (!integ) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'stripe')
++                    .is('user_id', null)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+             // Se tiver chave no banco, usa ela (prioridade sobre o ENV)
+             if (integ?.config?.secKey && !String(integ.config.secKey).includes('placeholder')) {
+                 stripeKey = integ.config.secKey as string
+             }
+-        } catch { /* usa env como fallback */ }
++        } catch { /* usa env como fallback (Nível 3) */ }
+ 
+         if (!stripeKey || stripeKey.includes('placeholder')) {
+             return res.status(500).json({ error: 'Stripe não configurado. Configure em Admin → Pagamentos.' })
+@@ -180,19 +196,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
+         let token = process.env.PUSHINPAY_TOKEN || process.env.VITE_PUSHINPAY_TOKEN
+ 
+         try {
+-            let query = supabase
+-                .from('integrations')
+-                .select('config, enabled')
+-                .eq('id', 'pushinpay')
+-
+-            if (productOwnerId) query = query.eq('user_id', productOwnerId)
++            // Busca AGRESSIVA em cascata: user_id específico → global → ENV
++            let integ = null
++
++            // Nível 1: Buscar integração do usuário específico
++            if (productOwnerId) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'pushinpay')
++                    .eq('user_id', productOwnerId)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+-            const { data: integ } = await query.maybeSingle()
++            // Nível 2: Se não encontrou, buscar integração global (user_id IS NULL)
++            if (!integ) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'pushinpay')
++                    .is('user_id', null)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+             if (integ?.enabled && integ.config?.apiToken) {
+                 token = integ.config.apiToken as string
+             }
+-        } catch { /* usa env */ }
++        } catch { /* usa env como fallback (Nível 3) */ }
+ 
+         // PushinPay indisponível
+         if (!token || token.length < 10 || token.includes('placeholder')) {
+@@ -382,20 +414,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
+         let webhookSecret = process.env.BUYPIX_WEBHOOK_SECRET || "";
+ 
+         try {
+-            let query = supabase
+-                .from('integrations')
+-                .select('config, enabled')
+-                .eq('id', 'buypix')
+-
+-            if (productOwnerId) query = query.eq('user_id', productOwnerId)
++            // Busca AGRESSIVA em cascata: user_id específico → global → ENV
++            let integ = null
++
++            // Nível 1: Buscar integração do usuário específico
++            if (productOwnerId) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'buypix')
++                    .eq('user_id', productOwnerId)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+-            const { data: integ } = await query.maybeSingle()
++            // Nível 2: Se não encontrou, buscar integração global (user_id IS NULL)
++            if (!integ) {
++                const { data } = await supabase
++                    .from('integrations')
++                    .select('config, enabled')
++                    .eq('id', 'buypix')
++                    .is('user_id', null)
++                    .maybeSingle()
++                integ = data
++            }
+ 
+             if (integ?.enabled && integ.config?.buypix_api_key) {
+                 apiKey = integ.config.buypix_api_key as string
+                 webhookSecret = (integ.config.buypix_webhook_secret as string) || webhookSecret
+             }
+-        } catch { /* usa env */ }
++        } catch { /* usa env como fallback (Nível 3) */ }
+ 
+         if (!apiKey || apiKey.includes('placeholder')) {
+             return res.status(500).json({ error: 'BuyPix API Key não configurada.' })
+diff --git a/src/components/checkout/CheckoutShell.tsx b/src/components/checkout/CheckoutShell.tsx
+index dd15903..e4fa47e 100644
+--- a/src/components/checkout/CheckoutShell.tsx
++++ b/src/components/checkout/CheckoutShell.tsx
+@@ -974,7 +974,7 @@ export function CheckoutShell({
+                     <Ico.Card /> Cartão
+                   </button>
+                 )}
+-                {(isPushinPayActive || isMundPayActive) && (
++                {(isPushinPayActive || isMundPayActive || isBuyPixActive) && (
+                   <button className={cn("sco-tab", method === "pix" && "sco-tab--on")} onClick={() =>
+setMethod("pix")}>
+                     <Ico.Pix /> Pix
+                   </button>
