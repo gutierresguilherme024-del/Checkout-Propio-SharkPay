@@ -75,7 +75,7 @@ export const integrationService = {
         const payload = { ...settings, updated_at: new Date().toISOString() };
         const { error } = await supabase
             .from('integrations')
-            .upsert(payload as any);
+            .upsert(payload as any, { onConflict: 'id,user_id' });
 
         if (error) {
             console.warn("Erro ao salvar no Supabase, salvando no localStorage:", error);
@@ -154,7 +154,7 @@ export const integrationService = {
 
         const { error } = await supabase
             .from('integrations')
-            .upsert(payload);
+            .upsert(payload, { onConflict: 'id,user_id' });
 
         if (error) {
             console.warn("Erro ao salvar configurações no Supabase, salvando local:", error);

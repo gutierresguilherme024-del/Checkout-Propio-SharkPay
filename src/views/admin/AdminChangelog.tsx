@@ -21,6 +21,13 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '2.5.5',
+        name: 'Persistência Crítica (Upsert Fix) & RLS Secure',
+        keywords: ['Supabase-Upsert', 'Constraint-Repair', 'Encryption-RLS', 'BuyPix-Persistence'],
+        type: 'correcao',
+        status: 'concluido',
+    },
+    {
         version: '2.5.4',
         name: 'Final BuyPix Fix: Busca Agressiva & SQL Sync',
         keywords: ['BuyPix', 'Gateway-Cascata', 'SQL-Integrations', 'Checkout-Shell', 'Schema-Repair'],

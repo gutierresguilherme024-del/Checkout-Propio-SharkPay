@@ -192,9 +192,13 @@ export default function AdminPayments() {
         states.mundpay = true;
       }
 
-      // BuyPix (Sempre ativo por padrão se não houver config no banco)
+      // BuyPix (Garantir inicialização do objeto de config)
       if (!values.buypix) {
         values.buypix = { buypix_api_key: "", buypix_webhook_secret: "" };
+        states.buypix = false; // Começa como desativado se for novo
+      } else if (values.buypix && values.buypix.buypix_api_key) {
+        // Se já tem chave, consideramos configurado (UI badge)
+        states.buypix = states.buypix ?? true;
       }
 
       setActiveStates(states);
