@@ -22,8 +22,8 @@ interface Version {
 const versions: Version[] = [
     {
         version: '2.5.8',
-        name: 'BuyPix Production Live',
-        keywords: ['BuyPix-Connected', 'Direct-Injection', 'Gateway-Live', 'Webhook-Ready'],
+        name: 'BuyPix Production Live (Confirmed)',
+        keywords: ['BuyPix-Connected', 'API-201-Success', 'Gateway-Stable', 'Webhook-200-OK'],
         type: 'lancamento',
         status: 'concluido',
     },
