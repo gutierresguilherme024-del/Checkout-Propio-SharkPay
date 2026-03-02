@@ -21,6 +21,13 @@ interface Version {
 // >>> Se status='falhou', o card "Correções" exibe o motivo + failReason <<<
 const versions: Version[] = [
     {
+        version: '2.5.4',
+        name: 'Final BuyPix Fix: Busca Agressiva & SQL Sync',
+        keywords: ['BuyPix', 'Gateway-Cascata', 'SQL-Integrations', 'Checkout-Shell'],
+        type: 'correcao',
+        status: 'concluido',
+    },
+    {
         version: '2.5.3',
         name: 'Schema Cache Resilience: Fix de Colunas Inexistentes',
         keywords: ['Cache-Fix', 'PostgREST-Sync', 'Database-Ready', 'Robust-API'],

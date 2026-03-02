@@ -1,5 +1,12 @@
 # Auditoria Contínua - SharkPay Checkout
 
+## [2.5.4] - 2026-03-02
+### Final BuyPix Fix: Busca Agressiva & SQL Sync
+**Resumo:** Implementação de busca em cascata de chaves e correção final das tabelas SQL.
+- **Busca Agressiva:** A API agora busca chaves do usuário específico, se não houver usa a global, e se não houver usa o ENV (fallback final).
+- **Checkout Hybrid Pix:** BuyPix integrado à aba unificada de Pix do checkout.
+- **SQL Final:** Script unificado para preparar as tabelas de integrações e produtos.
+
 ## [2.5.3] - 2026-03-02
 ### Schema Cache Resilience: Fix de Colunas Inexistentes
 **Resumo:** Correção definitiva para o erro de "schema cache" que ocorria após alterações no banco.
