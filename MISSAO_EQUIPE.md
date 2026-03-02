@@ -2,15 +2,20 @@
 
 ## 📍 AMBIENTE
 - **Antigravity (Cloud/Gemini):** Planejamento & Deploy (@sharckpay.vip)
-- **Agente Local (Local/Claude-GPT):** Implementação & Verificação Local
+- **Agente Local (Local/Claude-GPT):** Debugging Local & Auditoria de Console
 
-## ⚡ MISSÃO CRÍTICA (v2.5.5 - REPARO DE PERSISTÊNCIA)
-1. **Guilherme (Usuário):** Copie o conteúdo de [FINAL_BUYPIX_FIX.sql](file:///C:/Users/Guilherme/Desktop/Checkout%20Pr%C3%B3pio/FINAL_BUYPIX_FIX.sql) e rode no SQL Editor. Este novo script (v2.5.5) adiciona a constraint `UNIQUE NULLS NOT DISTINCT` necessária para o salvamento funcionar.
-2. **Agente Local:** Após o Guilherme rodar o SQL, tente salvar uma chave no Admin. O erro `42P10` deve sumir agora que especificamos a constraint no `upsert` e no banco.
-3. **Agente Local:** Valide que, ao recarregar a página, o card BuyPix mostra "Configurado" (se houver chave).
+## 🚨 MISSÃO CRÍTICA (v2.5.6 - REPARO DE VISIBILIDADE & DADOS)
+1. **Guilherme (Usuário):** Descobri por que os produtos sumiram. Ao ativar a segurança (RLS), o banco bloqueou a leitura de tudo que não tinha dono. 
+   - **Ação:** Copie o conteúdo de [FINAL_BUYPIX_FIX.sql](file:///C:/Users/Guilherme/Desktop/Checkout%20Pr%C3%B3pio/FINAL_BUYPIX_FIX.sql) (v2.5.6) e rode no Supabase. Isso vai trazer seus produtos de volta imediatamente.
+2. **Agente Local:** Preciso que você seja meus "olhos" no navegador do Guilherme:
+   - Abra o console do navegador (F12) na aba "Pagamentos".
+   - Tente clicar em "Salvar" no BuyPix.
+   - Verifique na aba **Network (Rede)** qual o erro retornado no request para `/rest/v1/integrations`.
+   - Copie o corpo do erro (JSON) e cole aqui no `MISSAO_EQUIPE.md`.
+   - Verifique também se há erros de "Permission Denied" ou "403" ao listar produtos.
 
-## 🏁 HANDOVER DE PRODUÇÃO
-O Antigravity está realizando o deploy v2.5.5.
+## 🏁 STATUS DE REPARAÇÃO
+O SQL v2.5.6 restaura as políticas de leitura para anônimos e administradores.
 
 ---
-*Status: Aguardando Guilherme rodar o SQL v2.5.5 e Agente Local validar persistência.*
+*Status: Aguardando Guilherme rodar SQL v2.5.6 e Agente Local reportar erro de rede.*

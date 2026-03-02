@@ -72,7 +72,11 @@ export const integrationService = {
     },
 
     async saveSettings(settings: IntegrationSettings): Promise<void> {
-        const payload = { ...settings, updated_at: new Date().toISOString() };
+        const payload = {
+            ...settings,
+            user_id: settings.user_id || null,
+            updated_at: new Date().toISOString()
+        };
         const { error } = await supabase
             .from('integrations')
             .upsert(payload as any, { onConflict: 'id,user_id' });
@@ -147,10 +151,9 @@ export const integrationService = {
             name: 'Configurações de Layout',
             enabled: true,
             config,
+            user_id: userId || null, // Garante null em vez de undefined
             updated_at: new Date().toISOString()
         };
-
-        if (userId) payload.user_id = userId;
 
         const { error } = await supabase
             .from('integrations')

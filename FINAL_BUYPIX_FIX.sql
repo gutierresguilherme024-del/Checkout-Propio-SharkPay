@@ -44,25 +44,41 @@ ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.produtos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pedidos ENABLE ROW LEVEL SECURITY;
 
--- 6. POLÍTICAS DE ACESSO (PROTEÇÃO DE CONFIGS)
+-- 6. POLÍTICAS DE ACESSO (INTEGRATIONS - PROTEÇÃO DE CONFIGS)
 DROP POLICY IF EXISTS "Public read integrations" ON public.integrations;
--- Anon lê apenas metadados (para saber se está ativo), mas não a config sensível
 CREATE POLICY "Public read integrations" ON public.integrations 
 FOR SELECT USING (true);
 
--- Admin gerencia tudo da sua conta ou global
 DROP POLICY IF EXISTS "Admin manage integrations" ON public.integrations;
 CREATE POLICY "Admin manage integrations" ON public.integrations 
 FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL);
 
--- 7. PERMISSÕES FINAIS
+-- 7. POLÍTICAS DE ACESSO (PRODUTOS - RECUPERAÇÃO DE VISIBILIDADE)
+DROP POLICY IF EXISTS "Public read active products" ON public.produtos;
+CREATE POLICY "Public read active products" ON public.produtos 
+FOR SELECT USING (true); -- No checkout todos precisam ver o produto
+
+DROP POLICY IF EXISTS "Admin manage products" ON public.produtos;
+CREATE POLICY "Admin manage products" ON public.produtos 
+FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL); -- Ver os dele e os legados
+
+-- 8. POLÍTICAS DE ACESSO (PEDIDOS)
+DROP POLICY IF EXISTS "Public insert orders" ON public.pedidos;
+CREATE POLICY "Public insert orders" ON public.pedidos 
+FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admin manage orders" ON public.pedidos;
+CREATE POLICY "Admin manage orders" ON public.pedidos 
+FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL);
+
+-- 9. PERMISSÕES FINAIS
 GRANT ALL ON TABLE public.integrations TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.produtos TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.pedidos TO anon, authenticated, service_role;
 
--- 8. INCIALIZAR REGISTRO GLOBAL SE NÃO EXISTIR
+-- 10. INCIALIZAR REGISTRO GLOBAL SE NÃO EXISTIR
 INSERT INTO public.integrations (id, type, name, enabled, config)
 VALUES ('buypix', 'payment', 'BuyPix', false, '{"buypix_api_key": "", "buypix_webhook_secret": ""}')
 ON CONFLICT (id, user_id) DO NOTHING;
 
--- ✅ Script v2.5.4 executado!
+-- ✅ Script v2.5.6 executado! (Reparo de Visibilidade)
