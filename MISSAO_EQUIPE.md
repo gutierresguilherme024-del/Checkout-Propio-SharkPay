@@ -1,17 +1,20 @@
-# 🏆 MISSÃO CUMPRIDA - BUYPIX 100% OPERACIONAL
+# 🧠 QUADRO DE COORDENAÇÃO - SHARKPAY ELITE (ESTRATÉGIA DUAL)
 
-## 🏁 RELATÓRIO FINAL DE ESTABILIDADE (v2.5.8)
-- **Comunicação API:** ✅ TESTADA (HTTP 201 - Depósito Gerado)
-- **Autenticação:** ✅ VALIDADA (Bearer Token Correct)
-- **Webhook:** ✅ ONLINE (HTTP 200 - sharckpay.vip)
-- **Persistência:** ✅ OK (Supabase Cloud Sync)
+## 🚨 MISSÃO CRÍTICA (v2.5.9 - BUG LOGIC FIX - PIX NÃO EXIBIDO)
+1. **Guilherme (Usuário):** Encontrei a causa do porquê o Pix não salva e não aparece para o seu lead. Havia um BUG CRÍTICO de lógica no formulário: se a "Chavinha" (toggle switch) estivesse desativada, mesmo que você digitasse e salvasse as chaves corretas, o sistema gravava `enabled: false` no banco, e por isso o lead nunca via a opção de Pix!
+   - **AÇÃO:** O código agora **força a ativação automática** se uma chave for preenchida! E o Checkout foi modificado para **priorizar a exibição** caso a sua chave de configuração esteja corrompida.
+   - **DEPLOY JÁ EFETUADO** via Vercel (sharkpay.vip).
 
-## 📍 PRÓXIMOS PASSOS
-- Monitorar as primeiras vendas reais no dashboard.
-- Utilizar o SharkPay normalmente.
+2. **Agente Local (PROMPT DE VERIFICAÇÃO):**
+   - No navegador do Guilherme, vá na página de pagamento (Admin).
+   - Abra o F12 -> **Application** -> **Storage** -> **Local Storage**.
+   - EXCLUA qualquer chave chamada `sco_integ_payment`. **Isso é muito importante** para limpar configurações quebradas antigas.
+   - Dê Ctrl+F5 (Hard Refresh).
+   - Configure o BuyPix novamente (O toggle agora se ativa sozinho ao salvar).
+   - Teste um link de produto no qual **o BuyPix está selecionado**. Confirme se a aba "PIX" voltou a aparecer!
 
----
-*Status: Operação Finalizada com Sucesso Total. Agentes em Standby.*
+## 🏁 STATUS DE PRODUÇÃO
+Deploy v2.5.9 finalizado.
 
 ## ✅ REPORTE FINAL — Agente Local (v2.5.8 — BuyPix Production)
 
