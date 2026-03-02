@@ -39,7 +39,7 @@ async function apiListarProdutos(userId?: string): Promise<Product[]> {
     // CORREÇÃO SUPREMA IPHONE/VIP:
     // O problema pode estar no roteamento do Vercel/PWA.
     // Vamos tentar buscar os dados por 3 caminhos diferentes em paralelo e usar o primeiro que responder com dados.
-    
+
     try {
         console.log("[Products] Iniciando busca multi-rota...");
 
@@ -48,7 +48,7 @@ async function apiListarProdutos(userId?: string): Promise<Product[]> {
             .from('produtos' as any)
             .select('*')
             .order('criado_em', { ascending: false });
-        
+
         if (!dbError && directData && directData.length > 0) {
             console.log("[Products] Dados carregados via Supabase Direto.");
             return directData as any[];
@@ -256,7 +256,7 @@ export default function AdminProducts() {
 
     useEffect(() => {
         fetchProducts();
-        
+
         // Loop de verificação para mobile - Tenta 3 vezes a cada 2 segundos
         let tries = 0;
         const checkInterval = setInterval(() => {
@@ -447,37 +447,219 @@ export default function AdminProducts() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground">Produtos Digitais</h2>
-                    <p className="text-muted-foreground">Gerencie seus produtos com entrega automática.</p>
+                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Produtos Digitais</h2>
+                    <p className="text-sm text-muted-foreground">Gerencie seus produtos com entrega automática.</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={fetchProducts} 
+                <div className="flex gap-2 shrink-0">
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={fetchProducts}
                         disabled={loading}
-                        className="border-[#00c2ff]/30 text-[#00c2ff]"
+                        className="border-[#00c2ff]/30 text-[#00c2ff] h-10 w-10"
                     >
                         <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
                     </Button>
-                    {!isAdding && (
-                        <Button onClick={() => setIsAdding(true)} className="gap-2 bg-[#00c2ff] hover:bg-[#00a2d6] text-white border-none">
-                            <Plus className="size-4" /> Novo Produto
-                        </Button>
-                    )}
+                    <Button onClick={() => { resetForm(); setIsAdding(true); }} className="gap-2 bg-[#00c2ff] hover:bg-[#00a2d6] text-white border-none h-10">
+                        <Plus className="size-4" /> Novo Produto
+                    </Button>
                 </div>
             </div>
-            
-            {/* Lista de Produtos */}
+
+            {/* ═══════════════════ FORMULÁRIO DE CRIAÇÃO / EDIÇÃO ═══════════════════ */}
+            {isAdding && (
+                <Card className="border-[#00c2ff]/40 shadow-lg shadow-[#00c2ff]/5 animate-in slide-in-from-top-4 duration-300">
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg text-[#00c2ff]">
+                                {editingProduct ? `Editando: ${editingProduct.nome}` : 'Novo Produto'}
+                            </CardTitle>
+                            <Button variant="ghost" size="icon" onClick={resetForm} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                                <X className="size-4" />
+                            </Button>
+                        </div>
+                        <CardDescription>
+                            {editingProduct ? 'Altere os dados e clique em Salvar.' : 'Preencha os dados para criar um novo produto digital.'}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        {/* Nome e Preço */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="prod-nome">Nome do Produto *</Label>
+                                <Input id="prod-nome" placeholder="Ex: Curso de Marketing Digital" value={nome} onChange={e => setNome(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="prod-preco">Preço (R$) *</Label>
+                                <Input id="prod-preco" type="number" step="0.01" min="0" placeholder="97.00" value={preco} onChange={e => setPreco(e.target.value)} />
+                            </div>
+                        </div>
+
+                        {/* Descrição */}
+                        <div className="space-y-2">
+                            <Label htmlFor="prod-desc">Descrição</Label>
+                            <Textarea id="prod-desc" placeholder="Descreva seu produto..." value={descricao} onChange={e => setDescricao(e.target.value)} rows={3} />
+                        </div>
+
+                        {/* Imagem e PDF */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="prod-img" className="flex items-center gap-2"><ImageIcon className="size-4" /> Imagem do Produto</Label>
+                                <Input id="prod-img" type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} className="file:mr-2 file:px-3 file:py-1 file:rounded-md file:bg-[#00c2ff]/10 file:text-[#00c2ff] file:border-0 file:text-xs file:font-medium" />
+                                {editingProduct?.imagem_url && !imageFile && (
+                                    <p className="text-xs text-muted-foreground">Imagem atual mantida. Selecione outra para substituir.</p>
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="prod-pdf" className="flex items-center gap-2"><FileText className="size-4" /> Arquivo PDF (Entrega)</Label>
+                                <Input id="prod-pdf" type="file" accept=".pdf" onChange={e => setPdfFile(e.target.files?.[0] || null)} className="file:mr-2 file:px-3 file:py-1 file:rounded-md file:bg-[#00c2ff]/10 file:text-[#00c2ff] file:border-0 file:text-xs file:font-medium" />
+                            </div>
+                        </div>
+
+                        {/* Ativo */}
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/20">
+                            <div className="flex items-center gap-3">
+                                <Power className="size-4 text-[#00c2ff]" />
+                                <div>
+                                    <Label className="text-sm font-medium">Produto Ativo</Label>
+                                    <p className="text-xs text-muted-foreground">Quando desativado, o checkout ficará indisponível.</p>
+                                </div>
+                            </div>
+                            <Switch checked={ativo} onCheckedChange={setAtivo} />
+                        </div>
+
+                        {/* ═══════ SELEÇÃO DE GATEWAYS ═══════ */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="size-4 text-[#00c2ff]" />
+                                <Label className="text-sm font-bold uppercase tracking-wider text-[#00c2ff]">Gateways de Pagamento</Label>
+                            </div>
+
+                            {/* Cartão — Stripe */}
+                            <div className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${stripeEnabled ? 'border-blue-500/50 bg-blue-500/5' : 'border-border bg-card hover:border-blue-500/20'}`}
+                                onClick={() => setStripeEnabled(!stripeEnabled)}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${stripeEnabled ? 'bg-blue-500' : 'bg-muted'}`}>
+                                            <CreditCard className="size-4 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-sm">Stripe — Cartão de Crédito</p>
+                                            <p className="text-xs text-muted-foreground">{isStripeGlobal ? '✅ Integração ativa globalmente' : '⚠️ Configure nas integrações'}</p>
+                                        </div>
+                                    </div>
+                                    <Switch checked={stripeEnabled} onCheckedChange={setStripeEnabled} onClick={e => e.stopPropagation()} />
+                                </div>
+                            </div>
+
+                            {/* Pix Gateway */}
+                            <div className="space-y-3">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Gateway Pix</Label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* PushinPay */}
+                                    <div className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${pixGateway === 'pushinpay' ? 'border-purple-500/50 bg-purple-500/5' : 'border-border bg-card hover:border-purple-500/20'}`}
+                                        onClick={() => setPixGateway(pixGateway === 'pushinpay' ? 'none' : 'pushinpay')}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${pixGateway === 'pushinpay' ? 'bg-purple-500' : 'bg-muted'}`}>
+                                                    <Zap className="size-4 text-white" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-sm">PushinPay</p>
+                                                    <p className="text-xs text-muted-foreground">{isPushinPayGlobal ? '✅ Ativa' : '⚠️ Configurar'}</p>
+                                                </div>
+                                            </div>
+                                            <div className={`size-5 rounded-full border-2 flex items-center justify-center transition-all ${pixGateway === 'pushinpay' ? 'border-purple-500 bg-purple-500' : 'border-muted-foreground'}`}>
+                                                {pixGateway === 'pushinpay' && <Check className="size-3 text-white" />}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* MundPay */}
+                                    <div className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${pixGateway === 'mundpay' ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-border bg-card hover:border-emerald-500/20'}`}
+                                        onClick={() => setPixGateway(pixGateway === 'mundpay' ? 'none' : 'mundpay')}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${pixGateway === 'mundpay' ? 'bg-black' : 'bg-muted'}`}>
+                                                    <ExternalLink className="size-4 text-white" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-sm">MundPay</p>
+                                                    <p className="text-xs text-muted-foreground">{isMundPayGlobal ? '✅ Ativa' : '⚠️ Configurar'}</p>
+                                                </div>
+                                            </div>
+                                            <div className={`size-5 rounded-full border-2 flex items-center justify-center transition-all ${pixGateway === 'mundpay' ? 'border-emerald-500 bg-emerald-500' : 'border-muted-foreground'}`}>
+                                                {pixGateway === 'mundpay' && <Check className="size-3 text-white" />}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* BuyPix */}
+                                    <div className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${pixGateway === 'buypix' ? 'border-[#00FFCC]/50 bg-[#00FFCC]/5' : 'border-border bg-card hover:border-[#00FFCC]/20'}`}
+                                        onClick={() => setPixGateway(pixGateway === 'buypix' ? 'none' : 'buypix')}>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${pixGateway === 'buypix' ? 'bg-black' : 'bg-muted'}`}>
+                                                    <Zap className="size-4 text-[#00FFCC]" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-sm">BuyPix</p>
+                                                    <p className="text-xs text-muted-foreground">{isBuyPixGlobal ? '✅ Ativa' : '⚠️ Configurar'}</p>
+                                                </div>
+                                            </div>
+                                            <div className={`size-5 rounded-full border-2 flex items-center justify-center transition-all ${pixGateway === 'buypix' ? 'border-[#00FFCC] bg-[#00FFCC]' : 'border-muted-foreground'}`}>
+                                                {pixGateway === 'buypix' && <Check className="size-3 text-black" />}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Campo URL MundPay */}
+                                {pixGateway === 'mundpay' && (
+                                    <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                        <Label htmlFor="mundpay-url">URL do Bot MundPay</Label>
+                                        <Input id="mundpay-url" placeholder="https://mundpay.com/..." value={mundpayUrl} onChange={e => setMundpayUrl(e.target.value)} />
+                                    </div>
+                                )}
+
+                                {/* Campo URL BuyPix Redirect */}
+                                {pixGateway === 'buypix' && (
+                                    <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                        <Label htmlFor="buypix-url">URL de Redirecionamento BuyPix</Label>
+                                        <Input id="buypix-url" placeholder="https://buypix.com/..." value={buypixRedirectUrl} onChange={e => setBuypixRedirectUrl(e.target.value)} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Botões de Ação */}
+                        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t border-border">
+                            <Button variant="outline" onClick={resetForm} className="h-11 gap-2">
+                                <X className="size-4" /> Cancelar
+                            </Button>
+                            <Button onClick={handleSave} disabled={isSaving || !nome || !preco} className="h-11 gap-2 bg-[#00c2ff] hover:bg-[#00a2d6] text-white border-none min-w-[160px]">
+                                {isSaving ? (
+                                    <><Loader2 className="size-4 animate-spin" /> Salvando...</>
+                                ) : (
+                                    <><Save className="size-4" /> {editingProduct ? 'Salvar Alterações' : 'Criar Produto'}</>
+                                )}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ═══════════════════ LISTA DE PRODUTOS ═══════════════════ */}
             {loading && products.length === 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {[1, 2, 3].map(i => (
                         <div key={i} className="h-48 bg-muted animate-pulse rounded-xl" />
                     ))}
                 </div>
-            ) : products.length === 0 ? (
+            ) : products.length === 0 && !isAdding ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed rounded-xl bg-card">
                     <Package className="size-12 text-muted-foreground mb-4 opacity-20" />
                     <h3 className="text-xl font-medium text-foreground">Nenhum produto cadastrado</h3>
@@ -495,137 +677,128 @@ export default function AdminProducts() {
 
                         return (
                             <Card key={product.id} className={`group overflow-hidden transition-all duration-300 bg-card ${!product.ativo ? 'opacity-60' : 'hover:border-[#00c2ff]/50 shadow-md'}`}>
-                                <CardContent className="p-5">
-                                    <div className="flex flex-col md:flex-row md:items-center gap-4">
-                                        <div className="flex-1 min-w-0 flex items-center gap-3">
-                                            <div className={`p-0 rounded-lg overflow-hidden size-12 flex-shrink-0 border border-border ${product.ativo ? 'bg-[#00c2ff]/10 text-[#00c2ff]' : 'bg-muted text-muted-foreground'}`}>
-                                                {product.imagem_url ? (
-                                                    <img src={normalizeImageUrl(product.imagem_url) || ""} alt={product.nome} className="size-full object-cover" />
-                                                ) : (
-                                                    <div className="size-full flex items-center justify-center">
-                                                        <Package className="size-5" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="font-semibold truncate text-foreground">{product.nome}</h3>
-                                                    {!product.ativo && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground uppercase font-bold shrink-0">Inativo</span>}
+                                <CardContent className="p-4 sm:p-5">
+                                    {/* Info do Produto */}
+                                    <div className="flex items-start sm:items-center gap-3 mb-3">
+                                        <div className={`p-0 rounded-lg overflow-hidden size-12 flex-shrink-0 border border-border ${product.ativo ? 'bg-[#00c2ff]/10 text-[#00c2ff]' : 'bg-muted text-muted-foreground'}`}>
+                                            {product.imagem_url ? (
+                                                <img src={normalizeImageUrl(product.imagem_url) || ""} alt={product.nome} className="size-full object-cover" />
+                                            ) : (
+                                                <div className="size-full flex items-center justify-center">
+                                                    <Package className="size-5" />
                                                 </div>
-                                                <p className="text-sm text-muted-foreground line-clamp-1">{product.descricao || "Sem descrição"}</p>
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-semibold truncate text-foreground">{product.nome}</h3>
+                                                {!product.ativo && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground uppercase font-bold shrink-0">Inativo</span>}
                                             </div>
+                                            <p className="text-sm text-muted-foreground line-clamp-1">{product.descricao || "Sem descrição"}</p>
                                         </div>
-                                        <div className="text-xl font-bold text-[#00c2ff] whitespace-nowrap">
+                                        <div className="text-lg sm:text-xl font-bold text-[#00c2ff] whitespace-nowrap shrink-0">
                                             R$ {product.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="gap-2 h-9 px-3 border-[#00c2ff]/30 hover:bg-[#00c2ff]/10 text-[#00c2ff] font-medium transition-all"
-                                                onClick={() => startEdit(product)}
-                                            >
-                                                <Pencil className="size-4" />
-                                                <span>Editar</span>
-                                            </Button>
-
-                                            <Button
-                                                variant={isCopied ? "outline" : "default"}
-                                                size="sm"
-                                                className="gap-2 h-9 px-3 transition-all bg-[#00c2ff] hover:bg-[#00a2d6] text-white border-none"
-                                                onClick={() => copyCheckoutLink(product)}
-                                                disabled={!checkoutUrl}
-                                            >
-                                                {isCopied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
-                                                {isCopied ? "Copiado" : "Link"}
-                                            </Button>
-
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="gap-2 h-9 px-3 transition-all border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10"
-                                                onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
-                                                disabled={!checkoutUrl}
-                                            >
-                                                <ExternalLink className="size-4" />
-                                                <span>Abrir</span>
-                                            </Button>
-
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => handleDelete(product.id)}
-                                                className="text-destructive h-9 w-9 hover:bg-destructive/10"
-                                            >
-                                                <Trash2 className="size-4" />
-                                            </Button>
                                         </div>
                                     </div>
 
+                                    {/* Botões de Ação — responsivos */}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5 h-9 px-3 border-[#00c2ff]/30 hover:bg-[#00c2ff]/10 text-[#00c2ff] font-medium transition-all flex-1 sm:flex-none min-w-[90px]"
+                                            onClick={() => startEdit(product)}
+                                        >
+                                            <Pencil className="size-3.5" />
+                                            Editar
+                                        </Button>
+
+                                        <Button
+                                            variant={isCopied ? "outline" : "default"}
+                                            size="sm"
+                                            className="gap-1.5 h-9 px-3 transition-all bg-[#00c2ff] hover:bg-[#00a2d6] text-white border-none flex-1 sm:flex-none min-w-[80px]"
+                                            onClick={() => copyCheckoutLink(product)}
+                                            disabled={!checkoutUrl}
+                                        >
+                                            {isCopied ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
+                                            {isCopied ? "Copiado" : "Link"}
+                                        </Button>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5 h-9 px-3 transition-all border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/10 flex-1 sm:flex-none min-w-[80px]"
+                                            onClick={() => checkoutUrl && window.open(checkoutUrl, '_blank')}
+                                            disabled={!checkoutUrl}
+                                        >
+                                            <ExternalLink className="size-3.5" />
+                                            Abrir
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleDelete(product.id)}
+                                            className="text-destructive h-9 w-9 hover:bg-destructive/10 shrink-0"
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </Button>
+                                    </div>
+
+                                    {/* Link do checkout */}
                                     {checkoutUrl && (
-                                        <div className="mt-3 p-3 bg-muted/30 rounded-lg border border-border flex items-center gap-3">
-                                            <Link className="size-4 text-[#00c2ff] shrink-0" />
-                                            <code className="text-xs text-foreground truncate flex-1 font-mono">{checkoutUrl}</code>
+                                        <div className="mt-3 p-2.5 bg-muted/30 rounded-lg border border-border flex items-center gap-2 overflow-hidden">
+                                            <Link className="size-3.5 text-[#00c2ff] shrink-0" />
+                                            <code className="text-[10px] sm:text-xs text-foreground truncate flex-1 font-mono">{checkoutUrl}</code>
                                         </div>
                                     )}
 
-                                    <div className="mt-5 pt-5 border-t border-white/5">
-                                        <div className="flex flex-col gap-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00c2ff]">Processamento Ativo</span>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
-                                                <div className={`
-                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
-                                                    ${product.stripe_enabled ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
-                                                `}>
-                                                    <div className={`p-1.5 rounded-lg ${product.stripe_enabled ? 'bg-blue-500' : 'bg-muted'}`}>
-                                                        <CreditCard className="size-3.5 text-white" />
+                                    {/* Gateways ativos */}
+                                    <div className="mt-4 pt-4 border-t border-white/5">
+                                        <div className="flex flex-col gap-2.5">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00c2ff]">Processamento Ativo</span>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-500
+                                                    ${product.stripe_enabled ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}`}>
+                                                    <div className={`p-1 rounded-md ${product.stripe_enabled ? 'bg-blue-500' : 'bg-muted'}`}>
+                                                        <CreditCard className="size-3 text-white" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Card</span>
-                                                        <span className={`text-[11px] font-bold ${product.stripe_enabled ? 'text-blue-400' : 'text-muted-foreground'}`}>Stripe</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-[8px] font-black text-muted-foreground uppercase leading-none">Card</span>
+                                                        <span className={`text-[10px] font-bold truncate ${product.stripe_enabled ? 'text-blue-400' : 'text-muted-foreground'}`}>Stripe</span>
                                                     </div>
                                                 </div>
 
-                                                <div className={`
-                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
-                                                    ${product.pushinpay_enabled ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
-                                                `}>
-                                                    <div className={`p-1.5 rounded-lg ${product.pushinpay_enabled ? 'bg-purple-500' : 'bg-muted'}`}>
-                                                        <Zap className="size-3.5 text-white" />
+                                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-500
+                                                    ${product.pushinpay_enabled ? 'bg-purple-500/10 border-purple-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}`}>
+                                                    <div className={`p-1 rounded-md ${product.pushinpay_enabled ? 'bg-purple-500' : 'bg-muted'}`}>
+                                                        <Zap className="size-3 text-white" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Pix</span>
-                                                        <span className={`text-[11px] font-bold ${product.pushinpay_enabled ? 'text-purple-400' : 'text-muted-foreground'}`}>PushinPay</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-[8px] font-black text-muted-foreground uppercase leading-none">Pix</span>
+                                                        <span className={`text-[10px] font-bold truncate ${product.pushinpay_enabled ? 'text-purple-400' : 'text-muted-foreground'}`}>PushinPay</span>
                                                     </div>
                                                 </div>
 
-                                                <div className={`
-                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
-                                                    ${product.mundpay_enabled ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
-                                                `}>
-                                                    <div className={`p-1.5 rounded-lg ${product.mundpay_enabled ? 'bg-black' : 'bg-muted'}`}>
-                                                        <ExternalLink className="size-3.5 text-white" />
+                                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-500
+                                                    ${product.mundpay_enabled ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}`}>
+                                                    <div className={`p-1 rounded-md ${product.mundpay_enabled ? 'bg-black' : 'bg-muted'}`}>
+                                                        <ExternalLink className="size-3 text-white" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Bot</span>
-                                                        <span className={`text-[11px] font-bold ${product.mundpay_enabled ? 'text-emerald-400' : 'text-muted-foreground'}`}>MundPay</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-[8px] font-black text-muted-foreground uppercase leading-none">Bot</span>
+                                                        <span className={`text-[10px] font-bold truncate ${product.mundpay_enabled ? 'text-emerald-400' : 'text-muted-foreground'}`}>MundPay</span>
                                                     </div>
                                                 </div>
 
-                                                <div className={`
-                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
-                                                    ${product.use_buypix ? 'bg-[#00FFCC]/10 border-[#00FFCC]/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
-                                                `}>
-                                                    <div className={`p-1.5 rounded-lg ${product.use_buypix ? 'bg-black' : 'bg-muted'}`}>
-                                                        <Zap className="size-3.5 text-[#00FFCC]" />
+                                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all duration-500
+                                                    ${product.use_buypix ? 'bg-[#00FFCC]/10 border-[#00FFCC]/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}`}>
+                                                    <div className={`p-1 rounded-md ${product.use_buypix ? 'bg-black' : 'bg-muted'}`}>
+                                                        <Zap className="size-3 text-[#00FFCC]" />
                                                     </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Instant</span>
-                                                        <span className={`text-[11px] font-bold ${product.use_buypix ? 'text-[#00FFCC]' : 'text-muted-foreground'}`}>BuyPix</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="text-[8px] font-black text-muted-foreground uppercase leading-none">Instant</span>
+                                                        <span className={`text-[10px] font-bold truncate ${product.use_buypix ? 'text-[#00FFCC]' : 'text-muted-foreground'}`}>BuyPix</span>
                                                     </div>
                                                 </div>
                                             </div>

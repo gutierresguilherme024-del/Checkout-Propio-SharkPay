@@ -6,6 +6,7 @@ export interface IntegrationSettings {
     name: string;
     enabled: boolean;
     config: Record<string, string | number | boolean | null>;
+    user_id?: string;
     updated_at?: string;
 }
 
@@ -37,7 +38,8 @@ export const integrationService = {
                     type: 'tracking',
                     name: 'UTMify',
                     enabled: true,
-                    config: { apiKey: envKey, utmScript: '', pixelId: '' }
+                    config: { apiKey: envKey, utmScript: '', pixelId: '' },
+                    user_id: userId
                 });
             }
         }
@@ -50,7 +52,8 @@ export const integrationService = {
                     type: 'payment',
                     name: 'Stripe',
                     enabled: true,
-                    config: { pubKey: stripeKey, secKey: '', webhookSecret: '' }
+                    config: { pubKey: stripeKey, secKey: '', webhookSecret: '' },
+                    user_id: userId
                 });
             }
             if (!results.find(r => r.id === 'mundpay')) {
@@ -59,7 +62,8 @@ export const integrationService = {
                     type: 'payment',
                     name: 'MundPay',
                     enabled: true,
-                    config: { webhookSecret: '' }
+                    config: { webhookSecret: '' },
+                    user_id: userId
                 });
             }
         }
@@ -68,9 +72,10 @@ export const integrationService = {
     },
 
     async saveSettings(settings: IntegrationSettings): Promise<void> {
+        const payload = { ...settings, updated_at: new Date().toISOString() };
         const { error } = await supabase
             .from('integrations')
-            .upsert({ ...settings, updated_at: new Date().toISOString() } as any);
+            .upsert(payload as any);
 
         if (error) {
             console.warn("Erro ao salvar no Supabase, salvando no localStorage:", error);

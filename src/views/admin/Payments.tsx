@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { integrationService } from "@/lib/integrations";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── Integrações disponíveis de Pagamento ────────────────────────────────────
 const PAYMENT_INTEGRATIONS = [
@@ -131,6 +132,7 @@ const PAYMENT_INTEGRATIONS = [
 type Integration = (typeof PAYMENT_INTEGRATIONS)[number];
 
 export default function AdminPayments() {
+  const { session } = useAuth();
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({
     stripe: true,
     pushinpay: true,
@@ -143,7 +145,12 @@ export default function AdminPayments() {
 
   useEffect(() => {
     async function load() {
-      const payments = await integrationService.getSettings('payment');
+      if (!session?.user?.id) {
+        if (session === null) setIsLoading(false); // se não tem sessão, para de carregar
+        return;
+      }
+
+      const payments = await integrationService.getSettings('payment', session.user.id);
 
       const states: Record<string, boolean> = { ...activeStates };
       const values: Record<string, any> = {};
@@ -205,7 +212,8 @@ export default function AdminPayments() {
       type: 'payment',
       name: integ.name,
       enabled: activeStates[id],
-      config: configValues[id] || {}
+      config: configValues[id] || {},
+      user_id: session?.user?.id
     });
 
     toast.success(`Configurações de ${integ.name} salvas!`);
@@ -223,7 +231,8 @@ export default function AdminPayments() {
       type: 'payment',
       name: integ.name,
       enabled: enabled,
-      config: configValues[id] || {}
+      config: configValues[id] || {},
+      user_id: session?.user?.id
     });
 
     toast.success(`${integ.name} ${enabled ? 'ativado' : 'desativado'} com sucesso!`);

@@ -382,67 +382,152 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let webhookSecret = process.env.BUYPIX_WEBHOOK_SECRET || "";
 
         try {
-            let query = supabase
-                .from('integrations')
-                .select('config, enabled')
-                .eq('id', 'buypix')
+            // Tentativa 1: buscar pela config do dono do produto
+            if (productOwnerId) {
+                const { data: integ } = await supabase
+                    .from('integrations')
+                    .select('config, enabled')
+                    .eq('id', 'buypix')
+                    .eq('user_id', productOwnerId)
+                    .maybeSingle()
 
-            if (productOwnerId) query = query.eq('user_id', productOwnerId)
-
-            const { data: integ } = await query.maybeSingle()
-
-            if (integ?.enabled && integ.config?.buypix_api_key) {
-                apiKey = integ.config.buypix_api_key as string
-                webhookSecret = (integ.config.buypix_webhook_secret as string) || webhookSecret
+                if (integ?.enabled && integ.config?.buypix_api_key) {
+                    apiKey = integ.config.buypix_api_key as string
+                    webhookSecret = (integ.config.buypix_webhook_secret as string) || webhookSecret
+                    console.log('[buypix] API Key carregada via productOwnerId')
+                }
             }
-        } catch { /* usa env */ }
 
-        if (!apiKey || apiKey.includes('placeholder')) {
+            // Tentativa 2: Fallback Global (busca registro onde user_id é nulo)
+            if (!apiKey || apiKey.includes('placeholder')) {
+                const { data: globalInteg } = await supabase
+                    .from('integrations')
+                    .select('config, enabled')
+                    .eq('id', 'buypix')
+                    .is('user_id', null)
+                    .maybeSingle()
+
+                if (globalInteg?.config?.buypix_api_key) {
+                    apiKey = globalInteg.config.buypix_api_key as string
+                    webhookSecret = (globalInteg.config.buypix_webhook_secret as string) || webhookSecret
+                    console.log('[buypix] API Key carregada via fallback global (user_id null)')
+                }
+            }
+
+            // Tentativa 3: Backup Agressivo (busca qualquer registro buypix com config)
+            if (!apiKey || apiKey.includes('placeholder')) {
+                const { data: anyIntegs } = await supabase
+                    .from('integrations')
+                    .select('config, enabled')
+                    .eq('id', 'buypix')
+                    .limit(5)
+
+                if (anyIntegs && anyIntegs.length > 0) {
+                    const valid = anyIntegs.find(i => i.config?.buypix_api_key);
+                    if (valid) {
+                        apiKey = valid.config.buypix_api_key as string
+                        webhookSecret = (valid.config.buypix_webhook_secret as string) || webhookSecret
+                        console.log('[buypix] API Key carregada via backup agressivo')
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.warn('[buypix] Erro crítico na busca de config:', e.message)
+        }
+
+        if (!apiKey || apiKey.length < 5 || apiKey.includes('placeholder')) {
             return res.status(500).json({ error: 'BuyPix API Key não configurada.' })
         }
 
         try {
             // 1. Registrar pedido pendente
-            await supabase.from('pedidos').insert({
-                id: pid,
-                user_id: productOwnerId,
-                email_comprador: email,
-                nome_comprador: nome || 'Cliente',
-                valor: Number(valor),
-                metodo_pagamento: 'pix',
-                status: 'pendente',
-                gateway: 'buypix',
-                utm_source: utm_source || null,
-                checkout_slug: checkout_slug || null,
-                buypix_status: 'pending'
-            } as any)
+            try {
+                await supabase.from('pedidos').insert({
+                    id: pid,
+                    user_id: productOwnerId,
+                    email_comprador: email,
+                    nome_comprador: nome || 'Cliente',
+                    valor: Number(valor),
+                    metodo_pagamento: 'pix',
+                    status: 'pendente',
+                    gateway: 'buypix',
+                    utm_source: utm_source || null,
+                    checkout_slug: checkout_slug || null,
+                    buypix_status: 'pending'
+                } as any)
+            } catch (e) {
+                console.error('[buypix] Erro ao inserir pedido:', e)
+            }
 
             // 2. Criar depósito na BuyPix
+            console.log(`[buypix] Chamando API com key: ${apiKey.slice(0, 8)}... valor: ${valor}`)
+
             const buyPixResp = await fetch('https://buypix.me/api/v1/deposits', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-Idempotency-Key': pid
                 },
                 body: JSON.stringify({
-                    amount: Math.round(Number(valor) * 100)
+                    amount: Math.round(Number(valor) * 100),
+                    external_id: pid,
+                    description: `Pedido ${pid}`
                 })
             })
 
-            const buyPixData = await buyPixResp.json()
-            if (!buyPixResp.ok) throw new Error(`BuyPix ${buyPixResp.status}: ${buyPixData.message || JSON.stringify(buyPixData)}`)
+            const rawText = await buyPixResp.text()
+            console.log(`[buypix] Status: ${buyPixResp.status} | Resposta: ${rawText.slice(0, 500)}`)
 
-            // 3. Atualizar pedido com dados do QR Code
-            await supabase.from('pedidos').update({
-                buypix_deposit_id: buyPixData.id,
-                buypix_qr_code: buyPixData.pix_qr_code,
-                buypix_qr_code_base64: buyPixData.pix_qr_code_base64,
-                buypix_expires_at: buyPixData.expires_at,
-                gateway_payment_id: buyPixData.id
-            } as any).eq('id', pid)
+            let buyPixData: any
+            try {
+                buyPixData = JSON.parse(rawText)
+            } catch {
+                throw new Error(`BuyPix retornou resposta inválida: ${rawText.slice(0, 200)}`)
+            }
 
-            // 4. Log
+            if (!buyPixResp.ok) {
+                throw new Error(`BuyPix ${buyPixResp.status}: ${buyPixData.message || buyPixData.error || JSON.stringify(buyPixData)}`)
+            }
+
+            // 3. Extrair QR Code — suporta múltiplos formatos de resposta da API
+            const qrCodeText = buyPixData.pix_qr_code
+                || buyPixData.qr_code
+                || buyPixData.qrCode
+                || buyPixData.copy_paste
+                || buyPixData.pix_copy_paste
+                || buyPixData.code
+                || buyPixData.data?.qr_code
+                || buyPixData.data?.pix_qr_code
+                || ''
+
+            const qrCodeBase64 = buyPixData.pix_qr_code_base64
+                || buyPixData.qr_code_base64
+                || buyPixData.qrCodeBase64
+                || buyPixData.image
+                || buyPixData.qr_code_image
+                || buyPixData.data?.qr_code_base64
+                || ''
+
+            const depositId = buyPixData.id || buyPixData.deposit_id || buyPixData.data?.id || pid
+
+            console.log(`[buypix] QR Text: ${qrCodeText ? 'OK' : 'VAZIO'} | Base64: ${qrCodeBase64 ? 'OK' : 'VAZIO'} | ID: ${depositId}`)
+
+            // 4. Atualizar pedido com dados do QR Code
+            try {
+                await supabase.from('pedidos').update({
+                    buypix_deposit_id: depositId,
+                    buypix_qr_code: qrCodeText,
+                    buypix_qr_code_base64: qrCodeBase64,
+                    buypix_expires_at: buyPixData.expires_at || buyPixData.expiration || null,
+                    gateway_payment_id: depositId
+                } as any).eq('id', pid)
+            } catch (e) {
+                console.error('[buypix] Erro ao atualizar pedido com QR:', e)
+            }
+
+            // 5. Log
             try {
                 await supabase.from('logs_sistema').insert({
                     user_id: productOwnerId,
@@ -451,14 +536,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     evento: 'pix_gerado',
                     pedido_id: pid,
                     payload: buyPixData,
-                    mensagem: `Pix gerado via BuyPix para ${email}`
+                    sucesso: true,
+                    mensagem: `Pix gerado via BuyPix para ${email} | QR: ${qrCodeText ? 'presente' : 'ausente'}`
                 } as any)
             } catch { /* ignora */ }
 
             return res.status(200).json({
-                qr_code: buyPixData.pix_qr_code_base64,
-                qr_code_text: buyPixData.pix_qr_code,
-                expires_at: buyPixData.expires_at,
+                qr_code: qrCodeBase64 || qrCodeText,
+                qr_code_text: qrCodeText,
+                expires_at: buyPixData.expires_at || buyPixData.expiration || new Date(Date.now() + 30 * 60000).toISOString(),
                 pedido_id: pid,
                 gateway: 'buypix'
             })
@@ -467,6 +553,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('[process-payment/pix/buypix]:', err)
             try {
                 await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'buypix',
+                    evento: 'pix_erro',
+                    pedido_id: pid,
+                    sucesso: false,
+                    mensagem: `Erro BuyPix: ${err.message}`
+                } as any)
             } catch { /* ignora */ }
             return res.status(500).json({ error: err.message || 'Erro ao gerar Pix via BuyPix' })
         }

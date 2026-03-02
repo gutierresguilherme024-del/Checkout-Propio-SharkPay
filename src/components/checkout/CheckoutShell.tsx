@@ -402,9 +402,10 @@ export function CheckoutShell({
     const globalActive = getStatus(payments, 'pushinpay') === 'active';
     if (!globalActive) return false;
 
-    if (product && product.pushinpay_enabled === false) return false;
+    // Só ativo se o produto explicitamente selecionou PushinPay
+    if (product) return product.pushinpay_enabled === true;
 
-    return true;
+    return true; // demo/preview sem produto: mostra tudo que está global
   }, [payments, getStatus, product]);
 
   const isMundPayActive = useMemo(() => {
@@ -422,9 +423,10 @@ export function CheckoutShell({
     const globalActive = getStatus(payments, 'buypix') === 'active';
     if (!globalActive) return false;
 
-    if (product && product.use_buypix === false) return false;
+    // Só ativo se o produto explicitamente selecionou BuyPix
+    if (product) return product.use_buypix === true;
 
-    return true;
+    return true; // demo/preview sem produto: mostra tudo que está global
   }, [payments, getStatus, product]);
 
   // ── STRIPE: Carregar chave pública (PK) ──
@@ -974,7 +976,7 @@ export function CheckoutShell({
                     <Ico.Card /> Cartão
                   </button>
                 )}
-                {(isPushinPayActive || isMundPayActive) && (
+                {(isPushinPayActive || isMundPayActive || isBuyPixActive) && (
                   <button className={cn("sco-tab", method === "pix" && "sco-tab--on")} onClick={() => setMethod("pix")}>
                     <Ico.Pix /> Pix
                   </button>

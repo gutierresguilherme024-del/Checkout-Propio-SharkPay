@@ -21,6 +21,8 @@ interface Produto {
   stripe_enabled?: boolean;
   pushinpay_enabled?: boolean;
   mundpay_enabled?: boolean;
+  use_buypix?: boolean;
+  buypix_redirect_url?: string | null;
   user_id?: string | null;
 }
 
@@ -223,7 +225,9 @@ export default function PublicCheckout() {
                 mundpay_url: produto.mundpay_url,
                 stripe_enabled: produto.stripe_enabled,
                 pushinpay_enabled: produto.pushinpay_enabled,
-                mundpay_enabled: produto.mundpay_enabled
+                mundpay_enabled: produto.mundpay_enabled,
+                use_buypix: produto.use_buypix,
+                buypix_redirect_url: produto.buypix_redirect_url
               } : null}
               onPaySuccess={(data) => {
                 if (data.qr_code) setPixData(data);
