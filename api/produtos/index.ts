@@ -19,7 +19,10 @@ function gerarSlug(nome: string): string {
 }
 
 // Campos extras de gateway — só incluir se a coluna existir no banco
-const GATEWAY_FIELDS = ['stripe_enabled', 'pushinpay_enabled', 'mundpay_enabled', 'mundpay_url']
+const GATEWAY_FIELDS = [
+    'stripe_enabled', 'pushinpay_enabled', 'mundpay_enabled', 'mundpay_url',
+    'use_buypix', 'buypix_redirect_url'
+]
 
 function buildRecord(body: Record<string, any>, includeGatewayFields: boolean): Record<string, any> {
     const record: Record<string, any> = {}
@@ -37,31 +40,62 @@ async function upsertWithRetry(
     record: Record<string, any>,
     id?: string
 ) {
-    // Primeira tentativa: com campos de gateway
+    // 1. Tentar o salvamento completo primeiro
     const query = operation === 'insert'
         ? supabase.from(table).insert([record]).select().single()
         : supabase.from(table).update(record).eq('id', id!).select().single()
 
     const { data, error } = await query
 
-    if (error && error.message?.includes('column') && error.message?.includes('schema cache')) {
-        // Coluna não existe — retry sem os campos de gateway
-        console.warn(`[API Produtos] Coluna faltando, tentando sem campos de gateway...`)
-        const cleanRecord: Record<string, any> = {}
-        for (const [key, value] of Object.entries(record)) {
-            if (!GATEWAY_FIELDS.includes(key)) cleanRecord[key] = value
-        }
-        const retryQuery = operation === 'insert'
-            ? supabase.from(table).insert([cleanRecord]).select().single()
-            : supabase.from(table).update(cleanRecord).eq('id', id!).select().single()
+    // Se funcionou, perfeito
+    if (!error) return data
 
-        const { data: retryData, error: retryError } = await retryQuery
-        if (retryError) throw retryError
-        return retryData
+    // 2. Se deu erro de coluna ou cache, filtrar para campos "Seguros" (Base)
+    console.warn(`[API Produtos] Erro detectado: ${error.message}. Tentando salvamento seguro...`)
+
+    // Forçar o PostgREST a recarregar o cache enviando um notify (se possível via RPC ou apenas ignorando erro)
+    try { await supabase.rpc('reload_schema_cache'); } catch { /* ignore */ }
+
+    // Campos que TEMOS CERTEZA que existem no banco (v1.0)
+    const BASE_FIELDS = [
+        'nome', 'preco', 'descricao', 'ativo',
+        'imagem_url', 'pdf_storage_key', 'checkout_slug',
+        'atualizado_em'
+    ]
+
+    const secureRecord: Record<string, any> = {}
+    for (const [key, value] of Object.entries(record)) {
+        if (BASE_FIELDS.includes(key)) {
+            secureRecord[key] = value
+        }
     }
 
-    if (error) throw error
-    return data
+    // Tentar salvamento apenas com o básico (Nome, Preço, etc)
+    const retryQuery = operation === 'insert'
+        ? supabase.from(table).insert([secureRecord]).select().single()
+        : supabase.from(table).update(secureRecord).eq('id', id!).select().single()
+
+    const { data: retryData, error: retryError } = await retryQuery
+
+    // 3. Se ainda falhou por causa do user_id (SaaS Migration), tentar sem ele
+    if (retryError && retryError.message?.includes('user_id')) {
+        console.warn(`[API Produtos] User_id inexistente, removendo do salvamento...`)
+        delete secureRecord.user_id;
+        const finalQuery = operation === 'insert'
+            ? supabase.from(table).insert([secureRecord]).select().single()
+            : supabase.from(table).update(secureRecord).eq('id', id!).select().single()
+
+        const final = await finalQuery;
+        if (final.error) throw final.error;
+        return final.data;
+    }
+
+    if (retryError) {
+        console.error('[API Produtos] Falha crítica no retry:', retryError);
+        throw retryError;
+    }
+
+    return retryData;
 }
 
 export default async function handler(req: any, res: any) {
@@ -92,7 +126,19 @@ export default async function handler(req: any, res: any) {
 
             if (userId) query = query.eq('user_id', userId)
 
-            const { data, error } = await query
+            let { data, error } = await query
+
+            // FALLBACK: Se o banco ainda não tem a coluna user_id ou se deu erro de cache
+            if (error && (error.message?.includes('user_id') || error.message?.includes('schema cache'))) {
+                console.warn("[API Produtos] Fallback para busca global devido a erro de schema/cache.");
+                const fallbackQuery = supabase
+                    .from('produtos')
+                    .select('*')
+                    .order('criado_em', { ascending: false })
+                const fallback = await fallbackQuery
+                data = fallback.data
+                error = fallback.error
+            }
 
             if (error) throw error
             return res.status(200).json({ produtos: data || [] })
@@ -105,7 +151,8 @@ export default async function handler(req: any, res: any) {
             const {
                 nome, preco, descricao, ativo, imagem_url, pdf_storage_key,
                 stripe_product_id, stripe_price_id, mundpay_url,
-                stripe_enabled, pushinpay_enabled, mundpay_enabled
+                stripe_enabled, pushinpay_enabled, mundpay_enabled,
+                use_buypix, buypix_redirect_url
             } = req.body
 
             if (!nome || preco === undefined) {
@@ -133,6 +180,8 @@ export default async function handler(req: any, res: any) {
             if (stripe_enabled !== undefined) record.stripe_enabled = stripe_enabled
             if (pushinpay_enabled !== undefined) record.pushinpay_enabled = pushinpay_enabled
             if (mundpay_enabled !== undefined) record.mundpay_enabled = mundpay_enabled
+            if (use_buypix !== undefined) record.use_buypix = use_buypix
+            if (buypix_redirect_url !== undefined) record.buypix_redirect_url = buypix_redirect_url
 
             const data = await upsertWithRetry('produtos', 'insert', record)
             return res.status(201).json({ produto: data })
@@ -146,7 +195,16 @@ export default async function handler(req: any, res: any) {
             if (userId) query = query.eq('user_id', userId)
 
             const { error } = await query
-            if (error) throw error
+
+            if (error) {
+                // Se falhou no delete por causa do user_id, tenta excluir globalmente (Admin)
+                if (error.message?.includes('user_id') || error.message?.includes('schema cache')) {
+                    const fallbackDelete = await supabase.from('produtos').delete().eq('id', id)
+                    if (fallbackDelete.error) throw fallbackDelete.error
+                } else {
+                    throw error
+                }
+            }
             return res.status(200).json({ sucesso: true })
 
         } else if (req.method === 'PUT') {

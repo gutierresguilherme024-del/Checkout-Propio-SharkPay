@@ -8,6 +8,28 @@ import { useAuth } from "@/hooks/useAuth";
 export function HeroSection() {
   const { session, loading } = useAuth();
 
+  const handleInitiate = () => {
+    console.log("[Tracking] InitiateCheckout via Clique no Botão");
+    const data = { value: 0, currency: 'BRL' };
+
+    // 1. Tentar utmify direto
+    try {
+      if (typeof (window as any).utmify === 'function') {
+        (window as any).utmify('InitiateCheckout', data);
+      } else if ((window as any).utmify?.send) {
+        (window as any).utmify.send('InitiateCheckout', data);
+      }
+    } catch (e) { }
+
+    // 2. Custom Event
+    window.dispatchEvent(new CustomEvent('utmify:InitiateCheckout', { detail: data }));
+
+    // 3. FBQ fallback
+    if (typeof (window as any).fbq === 'function') {
+      try { (window as any).fbq('track', 'InitiateCheckout'); } catch (e) { }
+    }
+  };
+
   return (
     <div className="relative w-full">
       {/* Main content */}
@@ -15,6 +37,7 @@ export function HeroSection() {
         {!loading && !session && (
           <NavLink
             to="/login"
+            onClick={handleInitiate}
             className={cn(
               "group mx-auto flex w-fit items-center gap-3 rounded-full border bg-card px-3 py-1 shadow",
               "animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-200 duration-500 ease-out",
@@ -31,6 +54,7 @@ export function HeroSection() {
         {session && (
           <NavLink
             to="/checkout/demo"
+            onClick={handleInitiate}
             className={cn(
               "group mx-auto flex w-fit items-center gap-3 rounded-full border bg-card px-3 py-1 shadow",
               "animate-in fade-in slide-in-from-bottom-6 fill-mode-backwards delay-200 duration-500 ease-out",
@@ -65,7 +89,7 @@ export function HeroSection() {
               {session ? (
                 <>
                   <Button asChild className="rounded-full" size="lg" variant="secondary">
-                    <NavLink to="/checkout/demo">
+                    <NavLink to="/checkout/demo" onClick={handleInitiate}>
                       Ver checkout
                     </NavLink>
                   </Button>
@@ -79,13 +103,13 @@ export function HeroSection() {
               ) : (
                 <>
                   <Button asChild className="rounded-full px-8" size="lg">
-                    <NavLink to="/login">
+                    <NavLink to="/login" onClick={handleInitiate}>
                       Começar agora
                       <ArrowRightIcon className="ms-2 size-4" />
                     </NavLink>
                   </Button>
                   <Button asChild className="rounded-full px-8" size="lg" variant="outline">
-                    <NavLink to="/login">
+                    <NavLink to="/login" onClick={handleInitiate}>
                       Fazer login
                     </NavLink>
                   </Button>

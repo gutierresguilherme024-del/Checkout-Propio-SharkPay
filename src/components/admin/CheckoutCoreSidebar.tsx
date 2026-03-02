@@ -39,7 +39,7 @@ const items = [
     url: "/admin/payments",
     icon: CreditCard,
     emoji: "💳",
-    badge: { label: "2 gateways", color: "bg-[hsl(260,85%,60%)] text-white" },
+    badge: { label: "4 gateways", color: "bg-[hsl(260,85%,60%)] text-white" },
   },
   { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
   { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },

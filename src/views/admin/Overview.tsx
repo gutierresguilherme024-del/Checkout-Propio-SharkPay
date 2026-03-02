@@ -14,11 +14,9 @@ type OrderStatus = "pendente" | "pago" | "falhou" | "bloqueado_fraude" | "cancel
 
 type Order = {
   id: string;
-  // Campos reais do Supabase
   email_comprador?: string;
   nome_comprador?: string;
   metodo_pagamento?: string;
-  // Aliases legados
   email?: string;
   nome?: string;
   metodo?: string;
@@ -29,6 +27,18 @@ type Order = {
   pago_em?: string;
   utm_source?: string;
   gateway?: string;
+};
+
+type Log = {
+  id: string;
+  tipo: 'webhook' | 'gateway' | 'audit' | 'debug';
+  gateway?: string;
+  evento?: string;
+  pedido_id?: string;
+  mensagem: string;
+  payload?: any;
+  sucesso: boolean;
+  criado_em: string;
 };
 
 // Helpers para acessar dados com fallback
@@ -47,6 +57,8 @@ export default function AdminOverview() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [realOrders, setRealOrders] = useState<Order[]>([]);
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -57,33 +69,57 @@ export default function AdminOverview() {
       const { data, error } = await supabase
         .from('pedidos')
         .select('*')
-        .eq('user_id', user.id)
         .order('criado_em', { ascending: false });
 
       if (error) throw error;
       setRealOrders(data || []);
     } catch (err) {
-      const error = err as Error;
-      console.error("Erro ao buscar pedidos:", error);
+      console.error("Erro ao buscar pedidos:", err);
       toast.error("Falha ao carregar dados reais do Supabase");
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const { data, error } = await supabase
+        .from('logs_sistema')
+        .select('*')
+        .order('criado_em', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (err) {
+      console.error("Erro ao buscar logs:", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
+    fetchLogs();
 
-    // Inscrição em tempo real para novos pedidos
-    const channel = supabase
-      .channel('schema-db-changes')
+    const ordersChannel = supabase
+      .channel('orders-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => {
         fetchOrders();
       })
       .subscribe();
 
+    const logsChannel = supabase
+      .channel('logs-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs_sistema' }, (payload) => {
+        setLogs(prev => [payload.new as Log, ...prev].slice(0, 50));
+      })
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(logsChannel);
     };
   }, []);
 
@@ -102,26 +138,43 @@ export default function AdminOverview() {
     });
   }, [realOrders, methodFilter, statusFilter, query]);
 
-  // Cálculos de Métricas Reais
   const stats = useMemo(() => {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+    const agora = new Date();
+    const hojeInicio = new Date();
+    hojeInicio.setHours(0, 0, 0, 0);
 
-    const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const isPago = (s: string) => ['pago', 'paid', 'approved', 'succeeded', 'aprovado'].includes(s?.toLowerCase());
 
-    const pagos = realOrders.filter(o => o.status === 'pago');
+    const pagos = realOrders.filter(o => isPago(o.status));
     const receitaTotal = pagos.reduce((acc, o) => acc + Number(o.valor), 0);
 
     const receitaHoje = pagos
-      .filter(o => o.pago_em && new Date(o.pago_em) >= hoje)
+      .filter(o => {
+        const dataStr = o.pago_em || o.criado_em || o.created_at;
+        if (!dataStr) return false;
+        const dataPagamento = new Date(dataStr);
+        return dataPagamento >= hojeInicio;
+      })
       .reduce((acc, o) => acc + Number(o.valor), 0);
 
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
     const receitaMes = pagos
-      .filter(o => o.pago_em && new Date(o.pago_em) >= inicioMes)
+      .filter(o => {
+        const dataStr = o.pago_em || o.criado_em || o.created_at;
+        if (!dataStr) return false;
+        return new Date(dataStr) >= inicioMes;
+      })
       .reduce((acc, o) => acc + Number(o.valor), 0);
 
-    const pixCount = pagos.filter(o => getMetodo(o) === 'pix').length;
-    const cartaoCount = pagos.filter(o => ['card', 'cartao'].includes(getMetodo(o))).length;
+    const pixCount = pagos.filter(o => {
+      const m = (o.metodo_pagamento || o.metodo || '').toLowerCase();
+      return m === 'pix' || m.includes('pix');
+    }).length;
+
+    const cartaoCount = pagos.filter(o => {
+      const m = (o.metodo_pagamento || o.metodo || '').toLowerCase();
+      return ['card', 'cartao', 'credit_card'].some(k => m.includes(k));
+    }).length;
 
     return {
       receitaHoje,
@@ -134,33 +187,21 @@ export default function AdminOverview() {
     };
   }, [realOrders]);
 
-  // Vendas por dia nos últimos 30 dias
   const salesByDay = useMemo(() => {
     const days = Array.from({ length: 30 }).map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (29 - i));
       d.setHours(0, 0, 0, 0);
-      return {
-        date: d,
-        display: d.getDate(),
-        value: 0
-      };
+      return { date: d, display: d.getDate(), value: 0 };
     });
-
     realOrders.filter(o => o.status === 'pago' && o.pago_em).forEach(o => {
       const orderDate = new Date(o.pago_em!);
       orderDate.setHours(0, 0, 0, 0);
       const dayIndex = days.findIndex(d => d.date.getTime() === orderDate.getTime());
-      if (dayIndex !== -1) {
-        days[dayIndex].value += Number(o.valor);
-      }
+      if (dayIndex !== -1) days[dayIndex].value += Number(o.valor);
     });
-
     const maxValue = Math.max(...days.map(d => d.value), 1);
-    return days.map(d => ({
-      ...d,
-      percent: (d.value / maxValue) * 100
-    }));
+    return days.map(d => ({ ...d, percent: (d.value / maxValue) * 100 }));
   }, [realOrders]);
 
   return (
@@ -179,7 +220,7 @@ export default function AdminOverview() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchOrders} disabled={loading} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => { fetchOrders(); fetchLogs(); }} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
             Sincronizar
           </Button>
@@ -224,8 +265,8 @@ export default function AdminOverview() {
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">Tabela de Pedidos</h2>
-            <p className="text-xs text-muted-foreground">Listagem completa em tempo real</p>
+            <h2 className="text-base font-semibold">Listagem de Dados</h2>
+            <p className="text-xs text-muted-foreground">Histórico de pedidos e logs técnicos</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Input
@@ -234,7 +275,7 @@ export default function AdminOverview() {
               placeholder="E-mail ou Nome"
               className="w-56 bg-card/50 border-border"
             />
-            <Select value={methodFilter} onValueChange={(v) => setMethodFilter(v as "all" | "pix" | "cartao")}>
+            <Select value={methodFilter} onValueChange={(v) => setMethodFilter(v as any)}>
               <SelectTrigger className="w-32 bg-card/50 border-border">
                 <SelectValue placeholder="Método" />
               </SelectTrigger>
@@ -244,7 +285,7 @@ export default function AdminOverview() {
                 <SelectItem value="cartao">Cartão</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | OrderStatus)}>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
               <SelectTrigger className="w-32 bg-slate-900/50 border-white/10">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -265,29 +306,24 @@ export default function AdminOverview() {
           </TabsList>
           <TabsContent value="orders" className="mt-3">
             <Card className="overflow-hidden border-border bg-card/50">
-              {loading && realOrders.length === 0 ? (
-                <div className="p-20 flex flex-col items-center justify-center gap-4">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-muted-foreground">Conectando ao Supabase...</p>
-                </div>
-              ) : filteredOrders.length === 0 ? (
-                <div className="p-20 text-center text-muted-foreground">
-                  Nenhum pedido encontrado.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-white/5">
-                      <TableRow>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Método</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredOrders.map((o) => (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-white/5">
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Método</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Data</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading && realOrders.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                    ) : filteredOrders.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="h-24 text-center">Nenhum pedido.</TableCell></TableRow>
+                    ) : (
+                      filteredOrders.map((o) => (
                         <TableRow key={o.id} className="border-white/5 hover:bg-white/5">
                           <TableCell>
                             <div className="flex flex-col">
@@ -297,24 +333,59 @@ export default function AdminOverview() {
                           </TableCell>
                           <TableCell className="capitalize">{getMetodo(o)}</TableCell>
                           <TableCell className="font-medium">{money(o.valor)}</TableCell>
-                          <TableCell>
-                            <StatusPill status={o.status} />
-                          </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {new Date(getCreatedAt(o)).toLocaleString('pt-BR')}
-                          </TableCell>
+                          <TableCell><StatusPill status={o.status} /></TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{new Date(getCreatedAt(o)).toLocaleString('pt-BR')}</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
           </TabsContent>
           <TabsContent value="logs" className="mt-3">
-            <Card className="p-8 text-center text-sm text-muted-foreground border-white/5 bg-slate-900/50">
-              Os webhooks e logs de auditoria serão exibidos aqui em breve.
-              O sistema já está registrando transações em tempo real.
+            <Card className="overflow-hidden border-border bg-card/50">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-white/5">
+                    <TableRow>
+                      <TableHead className="w-[180px]">Data</TableHead>
+                      <TableHead>Evento</TableHead>
+                      <TableHead>Gateway</TableHead>
+                      <TableHead>Pedido</TableHead>
+                      <TableHead>Mensagem</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingLogs && logs.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando logs...</TableCell></TableRow>
+                    ) : logs.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">Nenhum log.</TableCell></TableRow>
+                    ) : (
+                      logs.map((log) => (
+                        <TableRow key={log.id} className="border-white/5 hover:bg-white/5">
+                          <TableCell className="text-xs font-mono text-muted-foreground">{new Date(log.criado_em).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={`text-[10px] font-bold uppercase ${log.tipo === 'webhook' ? 'text-indigo-400 bg-indigo-500/10' :
+                              log.tipo === 'gateway' ? 'text-emerald-400 bg-emerald-500/10' :
+                                'text-slate-400 bg-slate-500/10'
+                              }`}>
+                              {log.evento || log.tipo}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs font-medium capitalize">{log.gateway || '-'}</TableCell>
+                          <TableCell className="text-xs font-mono text-primary/70">{log.pedido_id || '-'}</TableCell>
+                          <TableCell className="text-xs max-w-[300px] truncate" title={log.mensagem}>{log.mensagem}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={`w-2 h-2 rounded-full inline-block ${log.sucesso ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>
@@ -353,7 +424,6 @@ function StatusPill({ status }: { status: OrderStatus }) {
     bloqueado_fraude: { label: "Fraude", cls: "bg-red-800/20 text-red-400 border-red-800/30" },
     cancelado: { label: "Cancelado", cls: "bg-slate-500/20 text-slate-400 border-slate-500/30" },
   };
-
   const v = map[status] || { label: status, cls: "bg-slate-500/20 text-slate-400" };
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold border uppercase tracking-wider ${v.cls}`}>

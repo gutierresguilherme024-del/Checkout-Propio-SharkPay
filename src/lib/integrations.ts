@@ -25,7 +25,46 @@ export const integrationService = {
             const local = localStorage.getItem(`sco_integ_${type}`);
             return local ? JSON.parse(local) : [];
         }
-        return data || [];
+
+        const results = data || [];
+
+        // Injeção de ENV Fallbacks (Somente se a lista estiver vazia ou faltando o ID específico)
+        if (type === 'tracking' && !results.find(r => r.id === 'utmify')) {
+            const envKey = import.meta.env.VITE_UTMIFY_API_KEY;
+            if (envKey && !envKey.includes('placeholder')) {
+                results.push({
+                    id: 'utmify',
+                    type: 'tracking',
+                    name: 'UTMify',
+                    enabled: true,
+                    config: { apiKey: envKey, utmScript: '', pixelId: '' }
+                });
+            }
+        }
+
+        if (type === 'payment') {
+            const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+            if (stripeKey && !stripeKey.includes('placeholder') && !results.find(r => r.id === 'stripe')) {
+                results.push({
+                    id: 'stripe',
+                    type: 'payment',
+                    name: 'Stripe',
+                    enabled: true,
+                    config: { pubKey: stripeKey, secKey: '', webhookSecret: '' }
+                });
+            }
+            if (!results.find(r => r.id === 'mundpay')) {
+                results.push({
+                    id: 'mundpay',
+                    type: 'payment',
+                    name: 'MundPay',
+                    enabled: true,
+                    config: { webhookSecret: '' }
+                });
+            }
+        }
+
+        return results;
     },
 
     async saveSettings(settings: IntegrationSettings): Promise<void> {

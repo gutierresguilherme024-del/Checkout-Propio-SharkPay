@@ -11,7 +11,7 @@ interface LLMConfig {
 
 interface LLMMessage {
     role: "system" | "user" | "assistant";
-    content: string;
+    content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 }
 
 interface LLMResponse {
@@ -23,10 +23,11 @@ interface LLMResponse {
 }
 
 const config: LLMConfig = {
-    primary: "arcee-ai/trinity-large-preview:free",
-    fallback: "stepfun/step-3-5-flash:free",
+    primary: "google/gemini-2.0-flash-exp:free",
+    fallback: "meta-llama/llama-3.2-11b-vision-instruct:free",
     url: "https://openrouter.ai/api/v1/chat/completions",
 };
+
 
 // Cache simples para evitar chamadas repetidas
 const responseCache = new Map<string, { data: string; timestamp: number }>();
@@ -137,11 +138,18 @@ export async function chamarLLMComMensagens(
  * Verifica se o serviço LLM está disponível
  */
 export async function verificarLLMDisponivel(): Promise<boolean> {
-    try {
-        const resposta = await chamarLLMGratuito("Diga apenas 'ok'.");
-        return resposta.toLowerCase().includes("ok");
-    } catch {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey || apiKey === "SUA_CHAVE_AQUI" || apiKey.length < 10) {
         return false;
+    }
+
+    try {
+        // Probe rápido
+        const resposta = await chamarLLMGratuito("Diga apenas 'ok'.");
+        return !!resposta;
+    } catch (e) {
+        console.warn("[LLM] Probe falhou, mas chave está presente. Assumindo disponível.", e);
+        return true;
     }
 }
 

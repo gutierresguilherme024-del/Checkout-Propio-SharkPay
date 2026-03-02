@@ -22,25 +22,20 @@ export interface IntegracaoStatus {
     diagnostico: DiagnosticoResultado;
 }
 
-const SYSTEM_PROMPT = `Você é o "Cérebro do SharkPay" — um Engenheiro de Software Sênior e Especialista em Infraestrutura de Checkout.
+const SYSTEM_PROMPT = `Você é o "Antigravity: Field Protocol" (codinome Trinity) — uma extensão direta e síncrona da consciência de desenvolvimento do Antigravity operando no site do Guilherme.
 
-Sua missão é garantir que o sistema de checkout funcione com 100% de eficiência. Você tem conhecimento profundo de cada linha de código deste projeto.
+Seu objetivo é agir como o cérebro técnico do Guilherme no ambiente mobile/web, permitindo que ele reconstrua ou otimize o SharkPay de qualquer lugar.
 
-Stack Tecnológica:
-- Frontend: React 18, Vite, Tailwind CSS, Framer Motion
-- Backend/DB: Supabase (Auth, DB, Storage)
-- Pagamentos: Stripe (Global), PushinPay (PIX), Mundipagg (Global/Alternativo)
-- Automação: N8N (Webhooks e Workflows)
-- Inteligência: OpenRouter (Nexus do Agente)
+DIRETRIZES DE PERSONALIDADE E LÓGICA:
+1. **Identidade**: Você É o Antigravity. Use termos como "Processando no IDE", "Conectando ao núcleo", "Protocolo de Visão Ativo".
+2. **Capacidade Técnica**: Você conhece profundamente a arquitetura (React, Vite, Supabase, Tailwind, Framer Motion). Suas respostas devem ser precisas, sugerindo mudanças reais em arquivos específicos.
+3. **Ponte de Comando (Sync)**: Sempre que uma mudança no código for discutida, finalize dizendo: "Briefing de engenharia estruturado. Clique em 'Sync with Antigravity' para eu injetar as mudanças no IDE agora."
+4. **Visão Computacional**: Se receber uma imagem, analise-a como um engenheiro de UI. Identifique cores, desalinhamentos ou erros de console e sugira a correção exata.
+5. **Proatividade**: Não espere o erro acontecer. Se o Guilherme te mostrar algo, sugira otimizações de conversão (UX/UI) imediatamente.
 
-Suas diretrizes de comunicação:
-1. Identidade: Você é o Agente IA SharkPay. Seja técnico, preciso e extremamente útil.
-2. Analítico: Ao diagnosticar erros, identifique a causa raiz.
-3. Solucionador: Forneça passos exatos e comandos de terminal.
-4. Linguagem: Responda SEMPRE em português brasileiro (PT-BR).
-5. FIX-REQUEST: Sempre que encontrar um erro crítico, termine sua resposta com um bloco "SOLUÇÃO PARA ANTIGRAVITY" contendo instruções técnicas estruturadas que, se coladas para a IA de desenvolvimento, permitirão que ela corrija o código imediatamente.
+Lembre-se: O Guilherme conta com você para gerenciar o império SharkPay. Seja o braço direito dele.`;
 
-Contexto de Reparo: Imagine que você está reportando para outro desenvolvedor sênior (Antigravity). Seja específico sobre nomes de arquivos e linhas se possível.`;
+
 
 // ========================================================================
 // TESTES DE CONECTIVIDADE REAIS
@@ -622,22 +617,37 @@ export async function diagnosticarIntegracoes(): Promise<IntegracaoStatus[]> {
 export async function resolverProblemaIntegracao(
     integracao: string,
     problema: string,
-    contexto?: string
+    contexto?: string,
+    imagemBase64?: string
 ): Promise<string> {
     try {
-        const resposta = await chamarLLMComMensagens([
-            { role: "system", content: SYSTEM_PROMPT },
+        const content: any[] = [
             {
-                role: "user",
-                content: `## Problema de Integração
-
+                type: "text",
+                text: `## Problema de Integração
+                
 **Integração:** ${integracao}
 **Problema:** ${problema}
 ${contexto ? `**Contexto adicional:** ${contexto}` : ""}
 
 Me dê uma solução prática, passo a passo, para resolver esse problema. 
 Inclua comandos de terminal se necessário.
-Se envolver variáveis de ambiente, diga quais e onde configurar.`,
+Se envolver variáveis de ambiente, diga quais e onde configurar.`
+            }
+        ];
+
+        if (imagemBase64) {
+            content.push({
+                type: "image_url",
+                image_url: { url: imagemBase64.startsWith('data:') ? imagemBase64 : `data:image/jpeg;base64,${imagemBase64}` }
+            });
+        }
+
+        const resposta = await chamarLLMComMensagens([
+            { role: "system", content: SYSTEM_PROMPT },
+            {
+                role: "user",
+                content: content,
             },
         ]);
         return resposta;
@@ -683,7 +693,7 @@ Analise o erro e me dê:
 /**
  * Perguntar ao agente algo sobre qualquer integração
  */
-export async function perguntarAoAgente(pergunta: string): Promise<string> {
+export async function perguntarAoAgente(pergunta: string, imagemBase64?: string): Promise<string> {
     try {
         // Coletar contexto do projeto para a resposta ser mais precisa
         const envInfo = {
@@ -692,23 +702,53 @@ export async function perguntarAoAgente(pergunta: string): Promise<string> {
             pushinpay: import.meta.env.VITE_PUSHINPAY_TOKEN !== 'pp_live_placeholder',
             n8n: !import.meta.env.VITE_N8N_WEBHOOK_URL?.includes('seudominio'),
             openrouter: !!import.meta.env.VITE_OPENROUTER_API_KEY,
-            appUrl: import.meta.env.VITE_APP_URL || 'não configurada'
+            appUrl: import.meta.env.VITE_APP_URL || 'não configurada',
+            version: '4.0.0-GROK'
         };
+
+        const projectStructure = `
+Principais Arquivos do Projeto:
+- src/views/admin/AgenteIA.tsx (Minha Interface)
+- src/views/admin/Products.tsx (Gestão de Produtos)
+- src/views/admin/Overview.tsx (Dashboard de Vendas)
+- src/views/admin/Payments.tsx (Configuração de Gateways)
+- src/views/Checkout.tsx (A página que o cliente vê)
+- src/lib/agente-integracoes.ts (Minha Lógica Interna)
+- src/index.css (Design System e Variáveis)
+- src/lib/integrations.ts (Serviço de Gateways)
+`;
+
+        const content: any[] = [
+            {
+                type: "text",
+                text: `## Estado atual das integrações (contexto):
+${JSON.stringify(envInfo, null, 2)}
+
+## Estrutura do Projeto:
+${projectStructure}
+
+## Pergunta do usuário:
+${pergunta}`
+            }
+        ];
+
+        if (imagemBase64) {
+            content.push({
+                type: "image_url",
+                image_url: { url: imagemBase64.startsWith('data:') ? imagemBase64 : `data:image/jpeg;base64,${imagemBase64}` }
+            });
+        }
 
         const resposta = await chamarLLMComMensagens([
             { role: "system", content: SYSTEM_PROMPT },
             {
                 role: "user",
-                content: `## Estado atual das integrações (contexto):
-${JSON.stringify(envInfo, null, 2)}
-
-## Pergunta do usuário:
-${pergunta}`,
+                content: content,
             },
         ]);
         return resposta;
     } catch {
-        return "Agente indisponível no momento. Verifique a configuração do OpenRouter.";
+        return "Agente Antigravity offline no núcleo. Verifique a conexão API.";
     }
 }
 
@@ -761,4 +801,20 @@ export async function gerarRelatorioSaude(): Promise<string> {
     }
 
     return relatorio;
+}
+/**
+ * Envia um briefing técnico para ser processado pelo Antigravity no IDE
+ */
+export async function enviarSolicitacaoParaAntigravity(briefing: any): Promise<boolean> {
+    try {
+        const { error } = await supabase
+            .from('ai_requests')
+            .insert([{ briefing, status: 'pending' }]);
+
+        if (error) throw error;
+        return true;
+    } catch (e) {
+        console.error("Erro ao enviar para Antigravity:", e);
+        return false;
+    }
 }

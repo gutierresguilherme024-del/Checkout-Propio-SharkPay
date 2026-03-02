@@ -1,5 +1,30 @@
 # Auditoria Contínua - SharkPay Checkout
 
+## [2.5.3] - 2026-03-02
+### Schema Cache Resilience: Fix de Colunas Inexistentes
+**Resumo:** Correção definitiva para o erro de "schema cache" que ocorria após alterações no banco.
+- **API Robustness:** Melhoria no tratamento de erros de coluna para garantir que o salvamento básico (nome/preço) sempre funcione.
+- **Cache Refresh:** Adicionado comando de notificação para o Supabase atualizar o esquema de tabelas imediatamente.
+
+### BuyPix Production Ready: Sincronização & Estabilidade
+**Resumo:** Versão final da integração BuyPix com banco de dados sincronizado e API resiliente.
+- **Resiliência:** API de produtos atualizada para evitar erros de esquema mesmo em transições de banco de dados.
+- **Produção:** Deployment final com todas as colunas de Gateway e SaaS validadas.
+- **PWA Icons:** Ícones de alta resolução da SharkPay aplicados permanentemente para iOS/Android.
+
+### Sidebar Sync: Contagem de Gateways Corrigida
+**Resumo:** Correção da lógica de exibição no sidebar para refletir o novo gateway BuyPix.
+- **UI Sync:** Atualização do contador de gateways disponíveis (Total: 4).
+- **Hook useIntegrations:** Inclusão do ID `buypix` na verificação de gateways ativos para garantir atualização dinâmica do badge.
+
+### BuyPix Integration: Gateway de Pagamento Instantâneo
+**Resumo:** Integração completa do gateway BuyPix para processamento de Pix com confirmação automática e alta conversão.
+- **Gateway BuyPix:** Implementação do fluxo completo de depósito, geração de QR Code e Verificação de Status via Webhook seguro (HMAC-SHA256).
+- **Gestão por Produto:** Seletor de gateway no cadastro de produtos, permitindo habilitar BuyPix individualmente para cada oferta.
+- **Visual Premium:** Demonstração visual dos gateways ativos nos cards de produtos seguindo a identidade visual SharkPay.
+- **Custom Icons:** Sincronização dos ícones de favicons e telas iniciais (PWA) utilizando as referências da marca.
+
+
 ## [v1.8.0] - 2027-02-27
 ### Otimização Mobile Premium & Sidebar Responsiva
 **Resumo:** Otimização completa da experiência mobile em todo o ecossistema (Checkout e Admin).

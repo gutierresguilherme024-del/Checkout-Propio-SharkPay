@@ -104,10 +104,10 @@ export function useAgenteLLM() {
         []
     );
 
-    const perguntar = useCallback(async (pergunta: string) => {
+    const perguntar = useCallback(async (pergunta: string, imagemBase64?: string) => {
         setState((prev) => ({ ...prev, carregando: true, erro: null }));
         try {
-            const resposta = await perguntarAoAgente(pergunta);
+            const resposta = await perguntarAoAgente(pergunta, imagemBase64);
             setState((prev) => ({ ...prev, carregando: false, ultimaResposta: resposta }));
             return resposta;
         } catch (e: any) {
@@ -119,6 +119,7 @@ export function useAgenteLLM() {
             return null;
         }
     }, []);
+
 
     const gerarRelatorio = useCallback(async () => {
         setState((prev) => ({ ...prev, carregando: true, erro: null }));

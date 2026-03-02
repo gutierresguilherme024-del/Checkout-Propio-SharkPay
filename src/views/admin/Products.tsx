@@ -27,6 +27,8 @@ interface Product {
     stripe_enabled: boolean;
     pushinpay_enabled: boolean;
     mundpay_enabled: boolean;
+    use_buypix?: boolean;
+    buypix_redirect_url?: string | null;
 }
 
 const APP_URL = window.location.origin;
@@ -35,9 +37,11 @@ import { supabase as supabaseClient } from "@/lib/supabase/client";
 
 // Funções de API — chamam o backend serverless (service_role key fica no servidor)
 // Adicionado fallback direto para o cliente Supabase caso a API local (Vercel Functions) não esteja rodando
-async function apiListarProdutos(): Promise<Product[]> {
+async function apiListarProdutos(userId?: string): Promise<Product[]> {
     try {
-        const res = await fetch('/api/produtos');
+        const res = await fetch('/api/produtos', {
+            headers: userId ? { 'Authorization': `Bearer ${userId}` } : {}
+        });
         if (res.ok) {
             const data = await res.json();
             return data.produtos || [];
@@ -47,20 +51,23 @@ async function apiListarProdutos(): Promise<Product[]> {
     }
 
     // Fallback: busca direta se a rota de API falhar (comum em npm run dev local)
-    const { data, error } = await supabaseClient
-        .from('produtos' as any)
-        .select('*')
-        .order('criado_em', { ascending: false });
+    let query = supabaseClient.from('produtos' as any).select('*');
+    if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query.order('criado_em', { ascending: false });
 
     if (error) throw new Error(error.message);
     return data as any[] || [];
 }
 
-async function apiCriarProduto(produto: Omit<Product, 'id' | 'criado_em'>): Promise<Product> {
+async function apiCriarProduto(produto: Omit<Product, 'id' | 'criado_em'>, userId?: string): Promise<Product> {
     try {
         const res = await fetch('/api/produtos', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(userId ? { 'Authorization': `Bearer ${userId}` } : {})
+            },
             body: JSON.stringify(produto)
         });
         if (res.ok) {
@@ -75,6 +82,7 @@ async function apiCriarProduto(produto: Omit<Product, 'id' | 'criado_em'>): Prom
         .from('produtos' as any)
         .insert([{
             ...produto,
+            user_id: userId || null,
             checkout_slug: (produto as any).checkout_slug || gerarSlugLocal(produto.nome),
             atualizado_em: new Date().toISOString()
         }])
@@ -101,19 +109,22 @@ async function apiExcluirProduto(id: string): Promise<void> {
     if (error) throw new Error(error.message);
 }
 
-async function apiAtualizarProduto(id: string, campos: Record<string, any>): Promise<Product> {
+async function apiAtualizarProduto(id: string, campos: Record<string, any>, userId?: string): Promise<Product> {
     try {
         const res = await fetch(`/api/produtos?id=${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(userId ? { 'Authorization': `Bearer ${userId}` } : {})
+            },
             body: JSON.stringify(campos)
         });
         if (res.ok) {
             const data = await res.json();
-            return data.produto;
+            return data.prod || data.produto;
         }
     } catch (e) {
-        console.warn("API de produtos offline para PUT, tentando Supabase direto...");
+        console.warn("API de produtos offline para PUT, tentando Supabase direto...", e);
     }
 
     const { data, error } = await supabaseClient
@@ -218,28 +229,33 @@ export default function AdminProducts() {
     const [ativo, setAtivo] = useState(true);
     const [mundpayUrl, setMundpayUrl] = useState("");
     const [stripeEnabled, setStripeEnabled] = useState(true);
-    // pixGateway: qual gateway usar para Pix neste produto ('pushinpay' | 'mundpay' | 'none')
-    const [pixGateway, setPixGateway] = useState<'pushinpay' | 'mundpay' | 'none'>('none');
+    // pixGateway: qual gateway usar para Pix neste produto ('pushinpay' | 'mundpay' | 'buypix' | 'none')
+    const [pixGateway, setPixGateway] = useState<'pushinpay' | 'mundpay' | 'buypix' | 'none'>('none');
+    const [buypixRedirectUrl, setBuypixRedirectUrl] = useState("");
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [pdfFile, setPdfFile] = useState<File | null>(null);
 
     // Derivados para compatibilidade com a API existente
     const pushinpayEnabled = pixGateway === 'pushinpay';
     const mundpayEnabled = pixGateway === 'mundpay';
+    const useBuypix = pixGateway === 'buypix';
 
     const { payments, getStatus } = useIntegrations();
     const isStripeGlobal = getStatus(payments, 'stripe') === 'active';
     const isPushinPayGlobal = getStatus(payments, 'pushinpay') === 'active';
     const isMundPayGlobal = getStatus(payments, 'mundpay') === 'active';
+    const isBuyPixGlobal = getStatus(payments, 'buypix') === 'active';
 
     useEffect(() => {
-        fetchProducts();
-    }, []);
+        if (session?.user?.id) {
+            fetchProducts();
+        }
+    }, [session?.user?.id]);
 
     async function fetchProducts() {
         setLoading(true);
         try {
-            const data = await apiListarProdutos();
+            const data = await apiListarProdutos(session?.user?.id);
 
             // Gerar slug para produtos que não têm (produtos legacy)
             const produtosParaAtualizar = data.filter(p => !p.checkout_slug);
@@ -272,10 +288,13 @@ export default function AdminProducts() {
         setDescricao(product.descricao || "");
         setAtivo(product.ativo);
         setMundpayUrl(product.mundpay_url || "");
+        setBuypixRedirectUrl(product.buypix_redirect_url || "");
         setStripeEnabled(product.stripe_enabled ?? true);
 
         // Determinar qual gateway de Pix está selecionado (Prioridade máxima aos novos campos booleanos)
-        if (product.mundpay_enabled) {
+        if (product.use_buypix) {
+            setPixGateway('buypix');
+        } else if (product.mundpay_enabled) {
             setPixGateway('mundpay');
         } else if (product.pushinpay_enabled) {
             setPixGateway('pushinpay');
@@ -326,6 +345,8 @@ export default function AdminProducts() {
                     stripe_enabled: stripeEnabled,
                     pushinpay_enabled: pushinpayEnabled,
                     mundpay_enabled: mundpayEnabled,
+                    use_buypix: useBuypix,
+                    buypix_redirect_url: useBuypix ? (buypixRedirectUrl || null) : null,
                 };
                 if (imagem_url) camposParaAtualizar.imagem_url = imagem_url;
                 if (pdf_storage_key) camposParaAtualizar.pdf_storage_key = pdf_storage_key;
@@ -353,6 +374,8 @@ export default function AdminProducts() {
                     stripe_enabled: stripeEnabled,
                     pushinpay_enabled: pushinpayEnabled,
                     mundpay_enabled: mundpayEnabled,
+                    use_buypix: useBuypix,
+                    buypix_redirect_url: buypixRedirectUrl || null,
                     // @ts-ignore - campo será adicionado via migração SaaS
                     user_id: session?.user?.id || null
                 });
@@ -387,6 +410,7 @@ export default function AdminProducts() {
         setMundpayUrl("");
         setStripeEnabled(true);
         setPixGateway('none');
+        setBuypixRedirectUrl("");
         setImageFile(null);
         setPdfFile(null);
     }
@@ -538,10 +562,10 @@ export default function AdminProducts() {
                                         <div className="size-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.5)]" />
                                         Pagamento via PIX (Seletor)
                                     </Label>
-                                    {!isPushinPayGlobal && !isMundPayGlobal && <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-tight">Inativo Globalmente</span>}
+                                    {!isPushinPayGlobal && !isMundPayGlobal && !isBuyPixGlobal && <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-tight">Inativo Globalmente</span>}
                                 </div>
 
-                                {(isPushinPayGlobal || isMundPayGlobal) ? (
+                                {(isPushinPayGlobal || isMundPayGlobal || isBuyPixGlobal) ? (
                                     <div className="grid gap-3">
                                         {/* Opção: Desativar Pix */}
                                         <button
@@ -577,6 +601,50 @@ export default function AdminProducts() {
                                                 </div>
                                                 {pixGateway === 'pushinpay' && <Zap className="size-4 text-purple-500 animate-pulse ml-auto" />}
                                             </button>
+                                        )}
+
+                                        {/* Opção: BuyPix */}
+                                        {isBuyPixGlobal && (
+                                            <div className="space-y-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPixGateway('buypix')}
+                                                    className={`group w-full p-4 rounded-2xl border text-left transition-all duration-500 flex items-center gap-4 ${pixGateway === 'buypix' ? 'bg-[#00FFCC]/5 border-[#00FFCC]/40 shadow-lg shadow-[#00FFCC]/5 ring-1 ring-[#00FFCC]/20' : 'bg-background/50 border-border/40 hover:border-border/80'}`}
+                                                >
+                                                    <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${pixGateway === 'buypix' ? 'border-[#00FFCC] bg-[#00FFCC]/10' : 'border-muted-foreground/30'}`}>
+                                                        {pixGateway === 'buypix' && <div className="h-2.5 w-2.5 rounded-full bg-[#00FFCC]" />}
+                                                    </div>
+                                                    <div className={`h-12 w-12 rounded-xl flex items-center justify-center text-white font-black shadow-lg transition-transform duration-500 group-hover:scale-110 ${pixGateway === 'buypix' ? 'bg-black text-[#00FFCC]' : 'bg-muted text-muted-foreground opacity-60'}`}>
+                                                        BP
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-sm font-bold group-hover:text-[#00FFCC] transition-colors">BuyPix API (Instantâneo)</p>
+                                                        <p className="text-[11px] text-muted-foreground font-medium">Confirmação automática via webhook BuyPix.</p>
+                                                    </div>
+                                                    {pixGateway === 'buypix' && <Zap className="size-4 text-[#00FFCC] animate-pulse ml-auto" />}
+                                                </button>
+
+                                                {pixGateway === 'buypix' && (
+                                                    <div className="mt-2 ml-10 p-5 rounded-2xl bg-background/80 backdrop-blur-sm border border-[#00FFCC]/30 space-y-4 animate-in fade-in slide-in-from-top-4 duration-500 shadow-xl">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-[#00FFCC]/10 text-[#00FFCC]">
+                                                                <Link className="size-4" />
+                                                            </div>
+                                                            <div>
+                                                                <Label htmlFor="buypix_redirect" className="text-xs font-bold text-[#00FFCC] uppercase tracking-tighter">URL de Redirecionamento (Opcional)</Label>
+                                                                <p className="text-[10px] text-muted-foreground uppercase font-medium">Para onde o cliente vai após pagar</p>
+                                                            </div>
+                                                        </div>
+                                                        <Input
+                                                            id="buypix_redirect"
+                                                            value={buypixRedirectUrl}
+                                                            onChange={e => setBuypixRedirectUrl(e.target.value)}
+                                                            placeholder="https://seu-site.com/obrigado"
+                                                            className="bg-muted/50 border-[#00FFCC]/20 h-11 text-sm focus:ring-[#00FFCC]/20 focus:border-[#00FFCC]/40 rounded-xl transition-all"
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
 
                                         {/* Opção: MundPay */}
@@ -629,7 +697,7 @@ export default function AdminProducts() {
                                     </div>
                                 ) : (
                                     <div className="p-4 bg-muted/20 border border-dashed rounded-2xl text-center">
-                                        <p className="text-xs text-muted-foreground">Ative PushinPay ou MundPay na aba <span className="font-bold text-foreground underline decoration-primary/30">Pagamentos</span>.</p>
+                                        <p className="text-xs text-muted-foreground">Ative PushinPay, MundPay ou BuyPix na aba <span className="font-bold text-foreground underline decoration-primary/30">Pagamentos</span>.</p>
                                     </div>
                                 )}
                             </div>
@@ -754,44 +822,71 @@ export default function AdminProducts() {
                                         </div>
                                     )}
 
-                                    {/* Gateways Ativos - DEMONSTRADOR PREMIUM (Inspirado em front-produtos) */}
-                                    <div className="mt-5 pt-4 border-t border-border/40">
+                                    {/* Gateways Ativos - DEMONSTRADOR ULTRA PREMIUM */}
+                                    <div className="mt-5 pt-5 border-t border-white/5 relative">
                                         <div className="flex flex-col gap-3">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00c2ff]/80">Métodos de Pgto.</span>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00c2ff]">Processamento Ativo</span>
+                                                <div className="flex gap-1">
+                                                    <div className="size-1 rounded-full bg-[#00c2ff] animate-pulse" />
+                                                    <div className="size-1 rounded-full bg-[#00c2ff]/40" />
+                                                </div>
+                                            </div>
 
-                                            <div className="flex items-center gap-4">
-                                                {/* Pix Icon (PushinPay ou MundPay) */}
-                                                {(product.pushinpay_enabled || product.mundpay_enabled) ? (
-                                                    <div className="flex items-center gap-1.5 group/pix" title={product.pushinpay_enabled ? "Pix via PushinPay" : "Pix via MundPay"}>
-                                                        <div className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white transition-all group-hover:border-primary/50 group-hover:bg-primary/10">
-                                                            <Zap className="size-4 fill-primary text-primary" />
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-muted-foreground group-hover:text-foreground transition-colors">PIX</span>
-                                                    </div>
-                                                ) : (
-                                                    <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-muted-foreground/20 opacity-40 grayscale" title="Pix Desativado">
-                                                        <Zap className="size-4" />
-                                                    </div>
-                                                )}
-
+                                            <div className="grid grid-cols-2 sm:flex sm:items-center gap-3">
                                                 {/* Card Icon (Stripe) */}
-                                                {product.stripe_enabled ? (
-                                                    <div className="flex items-center gap-1.5 group/card" title="Cartão de Crédito via Stripe">
-                                                        <div className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white transition-all group-hover:border-blue-500/50 group-hover:bg-blue-500/10">
-                                                            <CreditCard className="size-4 fill-blue-500 text-blue-500" />
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-muted-foreground group-hover:text-foreground transition-colors">CARD</span>
+                                                <div className={`
+                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
+                                                    ${product.stripe_enabled ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
+                                                `}>
+                                                    <div className={`p-1.5 rounded-lg ${product.stripe_enabled ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-muted'}`}>
+                                                        <CreditCard className="size-3.5 text-white" />
                                                     </div>
-                                                ) : (
-                                                    <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center text-muted-foreground/20 opacity-40 grayscale" title="Cartão Desativado">
-                                                        <CreditCard className="size-4" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Credit Card</span>
+                                                        <span className={`text-[11px] font-bold ${product.stripe_enabled ? 'text-blue-400' : 'text-muted-foreground'}`}>Stripe</span>
                                                     </div>
-                                                )}
+                                                </div>
 
-                                                {/* Badge de Status Extra */}
-                                                <div className="ml-auto">
-                                                    <div className="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[9px] font-black text-white/50 uppercase tracking-tighter">
-                                                        {product.ativo ? "Verificado" : "Off-line"}
+                                                {/* Pix Icon (PushinPay) */}
+                                                <div className={`
+                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
+                                                    ${product.pushinpay_enabled ? 'bg-purple-500/10 border-purple-500/30 shadow-[0_4px_15px_rgba(147,51,234,0.1)]' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
+                                                `}>
+                                                    <div className={`p-1.5 rounded-lg ${product.pushinpay_enabled ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]' : 'bg-muted'}`}>
+                                                        <Zap className="size-3.5 text-white" />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Pix Nativo</span>
+                                                        <span className={`text-[11px] font-bold ${product.pushinpay_enabled ? 'text-purple-400' : 'text-muted-foreground'}`}>PushinPay</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Pix Icon (MundPay/Automation) */}
+                                                <div className={`
+                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
+                                                    ${product.mundpay_enabled ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
+                                                `}>
+                                                    <div className={`p-1.5 rounded-lg ${product.mundpay_enabled ? 'bg-black shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-muted'}`}>
+                                                        <ExternalLink className="size-3.5 text-white" />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Pix Automation</span>
+                                                        <span className={`text-[11px] font-bold ${product.mundpay_enabled ? 'text-emerald-400' : 'text-muted-foreground'}`}>MundPay</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Pix Icon (BuyPix) */}
+                                                <div className={`
+                                                    flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all duration-500
+                                                    ${product.use_buypix ? 'bg-[#00FFCC]/10 border-[#00FFCC]/30 shadow-[0_4px_15px_rgba(0,255,204,0.1)]' : 'bg-white/5 border-white/5 opacity-30 grayscale'}
+                                                `}>
+                                                    <div className={`p-1.5 rounded-lg ${product.use_buypix ? 'bg-black shadow-[0_0_10px_rgba(0,255,204,0.5)]' : 'bg-muted'}`}>
+                                                        <Zap className="size-3.5 text-[#00FFCC]" />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase leading-none">Pix Instantâneo</span>
+                                                        <span className={`text-[11px] font-bold ${product.use_buypix ? 'text-[#00FFCC]' : 'text-muted-foreground'}`}>BuyPix</span>
                                                     </div>
                                                 </div>
                                             </div>

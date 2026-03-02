@@ -40,14 +40,23 @@ export function useIntegrations() {
                 const envKey = import.meta.env.VITE_PUSHINPAY_TOKEN;
                 return (envKey && envKey.length > 20 && !envKey.includes('placeholder')) ? "active" : "inactive";
             }
-            if (id === 'mundpay') return "active"; // MundPay sempre ativo se não explicitamente desativado
+            if (id === 'mundpay') return "active";
+            if (id === 'buypix') return "active";
+            if (id === 'utmify') {
+                const envKey = import.meta.env.VITE_UTMIFY_API_KEY;
+                return (envKey && !envKey.includes('placeholder')) ? "active" : "inactive";
+            }
             return "inactive";
         }
 
         if (!item.enabled) return "inactive";
 
         // Regras de validação baseadas em regras-limitadas/limitaçoes.md
-        if (id === 'utmify') return (item.config.apiKey || item.config.utmScript || item.config.pixelId) ? "active" : "pending";
+        if (id === 'utmify') {
+            const envKey = import.meta.env.VITE_UTMIFY_API_KEY;
+            const hasEnv = envKey && !envKey.includes('placeholder');
+            return (item.config.apiKey || item.config.utmScript || item.config.pixelId || hasEnv) ? "active" : "pending";
+        }
         if (id === 'stripe') {
             const envKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
             const hasKeys = (item.config.pubKey && item.config.secKey);
@@ -61,6 +70,10 @@ export function useIntegrations() {
             return (isRealToken(envKey) || isRealToken(configKey)) ? "active" : "pending";
         }
         if (id === 'mundpay') return "active";
+        if (id === 'buypix') {
+            const hasKeys = !!item.config?.buypix_api_key && String(item.config.buypix_api_key).length > 10;
+            return hasKeys ? "active" : "pending";
+        }
 
         return "active";
     };
@@ -71,9 +84,9 @@ export function useIntegrations() {
         automations,
         loading: loadingTracking || loadingPayments || loadingAutomations,
         getStatus,
-        // Atalhos úteis
+        // Atalhos úteis - Consideram Envs mesmo se a lista estiver vazia
         isUtmifyActive: getStatus(tracking, 'utmify') === 'active',
-        activeGatewaysCount: payments.filter(p => getStatus(payments, p.id) === 'active').length,
-        activeTrackingCount: tracking.filter(t => getStatus(tracking, t.id) === 'active').length,
+        activeGatewaysCount: ['stripe', 'pushinpay', 'mundpay', 'buypix'].filter(id => getStatus(payments, id) === 'active').length,
+        activeTrackingCount: ['utmify'].filter(id => getStatus(tracking, id) === 'active').length,
     };
 }

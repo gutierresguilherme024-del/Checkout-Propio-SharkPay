@@ -235,9 +235,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const texto = await pixResp.text()
             if (!pixResp.ok) throw new Error(`PushinPay ${pixResp.status}: ${texto}`)
 
+            // PushinPay retorna QR code — fechar popup vazio se existir
             const pixData = JSON.parse(texto)
             try {
                 await supabase.from('pedidos').update({ pix_id: pixData.id } as any).eq('id', pid)
+
+                // LOG DE GERAÇÃO DE PIX
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'pushinpay',
+                    evento: 'pix_gerado',
+                    pedido_id: pid,
+                    payload: pixData,
+                    mensagem: `Pix gerado via PushinPay para ${email}`
+                } as any)
             } catch { /* ignora */ }
 
             return res.status(200).json({
@@ -251,6 +263,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('[process-payment/pix/pushinpay]:', err)
             try {
                 await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
+
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'pushinpay',
+                    evento: 'pix_erro',
+                    pedido_id: pid,
+                    sucesso: false,
+                    mensagem: `Erro ao gerar Pix: ${err.message}`
+                } as any)
             } catch { /* ignora */ }
             return res.status(500).json({ error: err.message || 'Erro ao gerar Pix via PushinPay' })
         }
@@ -315,6 +337,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             checkoutUrl.searchParams.set('metadata[pedido_id]', pid)
             checkoutUrl.searchParams.set('reference', pid)
 
+            // 3. LOG DE GERAÇÃO DE PIX (MUNDPAY INITIATED)
+            try {
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'mundpay',
+                    evento: 'pix_gerado',
+                    pedido_id: pid,
+                    mensagem: `Checkout Pix iniciado via MundPay para ${email}`
+                } as any)
+            } catch { /* ignora */ }
+
             return res.status(200).json({
                 checkout_url: checkoutUrl.toString(),
                 pedido_id: pid,
@@ -325,8 +359,116 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.error('[process-payment/mundpay]:', err)
             try {
                 await supabase.from('pedidos').update({ status: 'falhou' } as any).eq('id', pid)
+
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'mundpay',
+                    evento: 'pix_erro',
+                    pedido_id: pid,
+                    sucesso: false,
+                    mensagem: `Erro ao iniciar MundPay: ${err.message}`
+                } as any)
             } catch { /* ignora */ }
             return res.status(500).json({ error: err.message || 'Erro ao processar pagamento MundPay' })
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // PIX VIA BUYPIX (NEW)
+    // ═══════════════════════════════════════
+    if (method === 'pix' && gateway === 'buypix') {
+        let apiKey = process.env.BUYPIX_API_KEY || "";
+        let webhookSecret = process.env.BUYPIX_WEBHOOK_SECRET || "";
+
+        try {
+            let query = supabase
+                .from('integrations')
+                .select('config, enabled')
+                .eq('id', 'buypix')
+
+            if (productOwnerId) query = query.eq('user_id', productOwnerId)
+
+            const { data: integ } = await query.maybeSingle()
+
+            if (integ?.enabled && integ.config?.buypix_api_key) {
+                apiKey = integ.config.buypix_api_key as string
+                webhookSecret = (integ.config.buypix_webhook_secret as string) || webhookSecret
+            }
+        } catch { /* usa env */ }
+
+        if (!apiKey || apiKey.includes('placeholder')) {
+            return res.status(500).json({ error: 'BuyPix API Key não configurada.' })
+        }
+
+        try {
+            // 1. Registrar pedido pendente
+            await supabase.from('pedidos').insert({
+                id: pid,
+                user_id: productOwnerId,
+                email_comprador: email,
+                nome_comprador: nome || 'Cliente',
+                valor: Number(valor),
+                metodo_pagamento: 'pix',
+                status: 'pendente',
+                gateway: 'buypix',
+                utm_source: utm_source || null,
+                checkout_slug: checkout_slug || null,
+                buypix_status: 'pending'
+            } as any)
+
+            // 2. Criar depósito na BuyPix
+            const buyPixResp = await fetch('https://buypix.me/api/v1/deposits', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                    'X-Idempotency-Key': pid
+                },
+                body: JSON.stringify({
+                    amount: Math.round(Number(valor) * 100)
+                })
+            })
+
+            const buyPixData = await buyPixResp.json()
+            if (!buyPixResp.ok) throw new Error(`BuyPix ${buyPixResp.status}: ${buyPixData.message || JSON.stringify(buyPixData)}`)
+
+            // 3. Atualizar pedido com dados do QR Code
+            await supabase.from('pedidos').update({
+                buypix_deposit_id: buyPixData.id,
+                buypix_qr_code: buyPixData.pix_qr_code,
+                buypix_qr_code_base64: buyPixData.pix_qr_code_base64,
+                buypix_expires_at: buyPixData.expires_at,
+                gateway_payment_id: buyPixData.id
+            } as any).eq('id', pid)
+
+            // 4. Log
+            try {
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'buypix',
+                    evento: 'pix_gerado',
+                    pedido_id: pid,
+                    payload: buyPixData,
+                    mensagem: `Pix gerado via BuyPix para ${email}`
+                } as any)
+            } catch { /* ignora */ }
+
+            return res.status(200).json({
+                qr_code: buyPixData.pix_qr_code_base64,
+                qr_code_text: buyPixData.pix_qr_code,
+                expires_at: buyPixData.expires_at,
+                pedido_id: pid,
+                gateway: 'buypix'
+            })
+
+        } catch (err: any) {
+            console.error('[process-payment/pix/buypix]:', err)
+            try {
+                await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
+            } catch { /* ignora */ }
+            return res.status(500).json({ error: err.message || 'Erro ao gerar Pix via BuyPix' })
         }
     }
 

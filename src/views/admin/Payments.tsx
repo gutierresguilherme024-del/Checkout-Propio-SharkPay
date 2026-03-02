@@ -99,6 +99,33 @@ const PAYMENT_INTEGRATIONS = [
       { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_...", secret: true },
     ],
   },
+  {
+    id: "buypix",
+    name: "BuyPix",
+    description: "Gateway de Pix ultrarrápido com confirmação instantânea.",
+    icon: (
+      <svg viewBox="0 0 40 40" fill="none" className="h-full w-full">
+        <rect width="40" height="40" rx="10" fill="#000" />
+        <path d="M12 12H28V28H12V12Z" fill="white" fillOpacity="0.1" />
+        <text
+          x="50%"
+          y="55%"
+          dominantBaseline="middle"
+          textAnchor="middle"
+          fontSize="10"
+          fontWeight="900"
+          fill="#00FFCC"
+          fontFamily="sans-serif"
+        >
+          BUYPIX
+        </text>
+      </svg>
+    ),
+    fields: [
+      { key: "buypix_api_key", label: "Chave de API BuyPix", placeholder: "bpx_live_...", secret: true },
+      { key: "buypix_webhook_secret", label: "Webhook Secret", placeholder: "whsec_...", secret: true },
+    ],
+  },
 ] as const;
 
 type Integration = (typeof PAYMENT_INTEGRATIONS)[number];
@@ -107,7 +134,8 @@ export default function AdminPayments() {
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({
     stripe: true,
     pushinpay: true,
-    mundpay: true
+    mundpay: true,
+    buypix: false
   });
   const [configValues, setConfigValues] = useState<Record<string, Record<string, string | number | boolean | null>>>({});
   const [openInteg, setOpenInteg] = useState<Integration["id"] | null>(null);
@@ -127,37 +155,39 @@ export default function AdminPayments() {
       });
 
       // 2. Pre-fill com chaves do .env para o login do dono (Uso Próprio)
-      let prefilled = false;
-      const stripeSecret = import.meta.env.VITE_STRIPE_SECRET_KEY || "";
+      const stripePubKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "";
       const pushinpayToken = import.meta.env.VITE_PUSHINPAY_TOKEN || "";
 
       if (!values.stripe || !values.stripe.pubKey) {
-        values.stripe = {
-          pubKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "",
-          secKey: stripeSecret,
-          webhookSecret: import.meta.env.VITE_STRIPE_WEBHOOK_SECRET || ""
-        };
-        if (values.stripe.pubKey) prefilled = true;
+        if (stripePubKey && !stripePubKey.includes('placeholder')) {
+          values.stripe = {
+            pubKey: stripePubKey,
+            secKey: import.meta.env.VITE_STRIPE_SECRET_KEY || "",
+            webhookSecret: import.meta.env.VITE_STRIPE_WEBHOOK_SECRET || ""
+          };
+          states.stripe = true;
+        }
       }
 
       if (!values.pushinpay || !values.pushinpay.apiToken) {
-        const token = pushinpayToken.includes('placeholder') ? "" : pushinpayToken;
-        values.pushinpay = {
-          apiToken: token,
-          webhookToken: ""
-        };
-        if (token) prefilled = true;
+        if (pushinpayToken && !pushinpayToken.includes('placeholder')) {
+          values.pushinpay = {
+            apiToken: pushinpayToken,
+            webhookToken: ""
+          };
+          states.pushinpay = true;
+        }
       }
 
-      if (prefilled) {
-        console.log("SharkPay: Integrações pré-preenchidas com dados do servidor.");
-      }
-
-      // MundPay (Fallback configurado no Agente)
+      // MundPay (Sempre ativo por padrão se não houver config no banco)
       if (!values.mundpay) {
-        values.mundpay = {
-          webhookSecret: ""
-        };
+        values.mundpay = { webhookSecret: "" };
+        states.mundpay = true;
+      }
+
+      // BuyPix (Sempre ativo por padrão se não houver config no banco)
+      if (!values.buypix) {
+        values.buypix = { buypix_api_key: "", buypix_webhook_secret: "" };
       }
 
       setActiveStates(states);
@@ -202,6 +232,30 @@ export default function AdminPayments() {
   const handleTest = async (id: string) => {
     const ok = activeStates[id];
     if (!ok) return toast.error("Ative a integração primeiro.");
+
+    if (id === 'buypix') {
+      const apiKey = configValues.buypix?.buypix_api_key;
+      if (!apiKey) return toast.error("Insira a Chave de API primeiro.");
+
+      toast.loading("Testando conexão com BuyPix...");
+      try {
+        const resp = await fetch('https://buypix.me/api/v1/account', {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          toast.dismiss();
+          toast.success(`Conectado! Conta: ${data.name} | Saldo: R$ ${data.balance / 100}`);
+        } else {
+          toast.dismiss();
+          toast.error(`Erro: ${data.message || 'Falha na conexão'}`);
+        }
+      } catch (err) {
+        toast.dismiss();
+        toast.error("Erro ao conectar com servidor BuyPix.");
+      }
+      return;
+    }
 
     await integrationService.sendToN8N({
       event: 'test_payment_config',
@@ -304,7 +358,7 @@ export default function AdminPayments() {
                 variant="soft"
                 onClick={() => handleTest(integ.id)}
               >
-                Testar (n8n)
+                {integ.id === 'buypix' ? 'Testar Conexão' : 'Testar (n8n)'}
               </Button>
               <Button
                 variant="ghost"
@@ -314,6 +368,32 @@ export default function AdminPayments() {
                 Fechar
               </Button>
             </div>
+
+            {integ.id === 'buypix' && (
+              <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                <p className="text-sm font-semibold text-primary mb-2">Webhook URL</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/api/webhooks/buypix`}
+                    className="bg-background/50 font-mono text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/buypix`);
+                      toast.success("URL copiada!");
+                    }}
+                  >
+                    Copiar
+                  </Button>
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground uppercase tracking-wider">
+                  CADASTRE ESTA URL NO PAINEL DA BUYPIX PARA RECEBER CONFIRMAÇÕES DE PAGAMENTO.
+                </p>
+              </div>
+            )}
           </Card>
         );
       })()}

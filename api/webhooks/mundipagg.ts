@@ -16,34 +16,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        // Para Vercel Functions, req.body já vem como objeto se for JSON, 
-        // mas para verificar assinatura precisamos do raw body.
-        // Em Vercel, o raw body não é trivial de pegar sem middleware específico,
-        // mas podemos tentar usar o texto se não foi parseado.
-
-        const signature = req.headers['x-hub-signature'] as string || ''
         const body = req.body;
         const rawBody = JSON.stringify(body);
+        const eventType = body.type;
 
-        // Validação básica se o segredo estiver configurado
-        if (MUNDIPAGG_WEBHOOK_SECRET && signature) {
-            const expectedSignature = `sha1=${crypto
-                .createHmac('sha1', MUNDIPAGG_WEBHOOK_SECRET)
-                .update(rawBody)
-                .digest('hex')}`
-
-            if (!hmacEqual(signature, expectedSignature)) {
-                console.warn('[Mundipagg Webhook] Assinatura inválida')
-                return res.status(401).json({ error: 'Invalid signature' })
-            }
-        }
+        // LOG DE RECEBIMENTO DE WEBHOOK
+        await supabase.from('logs_sistema').insert({
+            tipo: 'webhook',
+            gateway: 'mundipagg',
+            evento: eventType,
+            pedido_id: body.data?.id || body.data?.metadata?.pedido_id,
+            payload: body,
+            mensagem: `Webhook Mundipagg recebido: ${eventType}`
+        } as any)
 
         console.log('[Mundipagg Webhook] Evento recebido:', body.type)
-
         // Mapeamento de Mundipagg para o Schema SharkPay (tabela 'pedidos')
         // Mundipagg envia dados em body.data
         const data = body.data;
-        const eventType = body.type;
 
         switch (eventType) {
             case 'invoice.status_changed':

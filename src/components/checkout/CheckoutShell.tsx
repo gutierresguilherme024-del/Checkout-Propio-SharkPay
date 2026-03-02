@@ -173,13 +173,17 @@ function StripeCardForm({
 
       if (paymentIntent.status === 'succeeded') {
         toast.success("Pagamento confirmado!", { id: toastId });
-        // Disparar evento de compra no UTMify
-        (window as any).utmify?.send?.('Purchase', {
-          email: payload.email,
-          name: payload.nome,
-          value: amount,
-          pedido_id: data.pedido_id
-        });
+
+        // Disparar evento de compra no UTMify via helper robusto
+        if (typeof (window as any).utmify === 'function') {
+          (window as any).utmify('Purchase', {
+            email: payload.email,
+            name: payload.nome,
+            value: amount,
+            pedido_id: data.pedido_id
+          });
+        }
+
         onSuccess(data.pedido_id);
       } else {
         throw new Error("Pagamento não concluído. Status: " + paymentIntent.status);
@@ -363,6 +367,8 @@ export type CheckoutShellProps = {
     stripe_enabled?: boolean | null;
     pushinpay_enabled?: boolean | null;
     mundpay_enabled?: boolean | null;
+    use_buypix?: boolean | null;
+    buypix_redirect_url?: string | null;
   } | null;
   mode?: "public" | "preview";
   onCaptureUtm?: (u: Record<string, string>) => void;
@@ -410,6 +416,15 @@ export function CheckoutShell({
 
     // É ativo se estiver habilitado no produto OU se for um produto legado com URL 
     return !!(product?.mundpay_enabled || product?.mundpay_url);
+  }, [payments, getStatus, product]);
+
+  const isBuyPixActive = useMemo(() => {
+    const globalActive = getStatus(payments, 'buypix') === 'active';
+    if (!globalActive) return false;
+
+    if (product && product.use_buypix === false) return false;
+
+    return true;
   }, [payments, getStatus, product]);
 
   // ── STRIPE: Carregar chave pública (PK) ──
@@ -484,10 +499,12 @@ export function CheckoutShell({
           toast.success("✅ Pagamento confirmado!");
 
           // Disparar evento de compra no UTMify
-          (window as any).utmify?.send?.('Purchase', {
-            value: amount,
-            pedido_id: idParaPolling
-          });
+          if (typeof (window as any).utmify === 'function') {
+            (window as any).utmify('Purchase', {
+              value: amount,
+              pedido_id: idParaPolling
+            });
+          }
 
           const slug = window.location.pathname.split('/checkout/')[1] || '';
           setTimeout(() => {
@@ -507,15 +524,17 @@ export function CheckoutShell({
     methodAutoSwitched.current = true;
 
     if (method === 'card' && !isStripeActive) {
-      if (isPushinPayActive || isMundPayActive) setMethod('pix');
-    } else if (method === 'pix' && !isPushinPayActive && !isMundPayActive) {
+      if (isPushinPayActive || isMundPayActive || isBuyPixActive) setMethod('pix');
+    } else if (method === 'pix' && !isPushinPayActive && !isMundPayActive && !isBuyPixActive) {
       if (isStripeActive) setMethod('card');
     }
-  }, [isStripeActive, isPushinPayActive, isMundPayActive, loading]);
+  }, [isStripeActive, isPushinPayActive, isMundPayActive, isBuyPixActive, loading]);
 
   // ── Auto-switch de método: só roda UMA VEZ após carregar integrações ──
 
-  const [hasTrackedInitiate, setHasTrackedInitiate] = useState(false);
+  // ── TRACKING: Fila de Eventos e Robustez ──
+  const eventQueue = useRef<Array<{ name: string, data: any }>>([]);
+  const hasTrackedInitiate = useRef(false);
 
   // Helper para disparar eventos para o UTMify/Tracking
   const fireTrackingEvent = useCallback((eventName: string, extra: any = {}) => {
@@ -525,33 +544,138 @@ export function CheckoutShell({
       name,
       value: amount,
       currency: 'BRL',
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
       ...extra
     };
 
-    console.log(`[Tracking] Disparando ${eventName}:`, trackingData);
+    console.log(`[Tracking] Agendando/Disparando ${eventName}:`, trackingData);
 
-    // 1. Tentar via UTMify
-    const utmify = (window as any).utmify;
-    if (typeof utmify === 'function') {
-      utmify(eventName, trackingData);
-    } else if (utmify?.send) {
-      utmify.send(eventName, trackingData);
-    }
+    const trySend = async () => {
+      let sent = false;
 
-    // 2. Tentar via Facebook Pixel (fbq) - UTMify costuma injetar ele
-    const fbq = (window as any).fbq;
-    if (typeof fbq === 'function') {
-      fbq('track', eventName, trackingData);
+      // LOG INTERNO PARA O PAINEL ADMIN (Real-time visibility)
+      try {
+        await supabase.from('logs_sistema').insert({
+          tipo: 'audit',
+          evento: eventName,
+          gateway: 'tracking',
+          mensagem: `Lead iniciou checkout: ${name || 'Lead Anônimo'} (${email || 'sem e-mail'})`,
+          pedido_id: undefined,
+          payload: trackingData,
+          sucesso: true
+        } as any);
+      } catch (e) {
+        console.warn("[Tracking] Falha ao gravar log de auditoria:", e);
+      }
+
+      // 1. Tentar via objeto global utmify (padrão v3/v4)
+      try {
+        if (typeof (window as any).utmify === 'function') {
+          (window as any).utmify(eventName, trackingData);
+          sent = true;
+        } else if ((window as any).utmify?.send) {
+          (window as any).utmify.send(eventName, trackingData);
+          sent = true;
+        }
+      } catch (e) {
+        console.warn("[UTMify] Erro no envio direto:", e);
+      }
+
+      // 2. Disparar evento customizado (DOM)
+      window.dispatchEvent(new CustomEvent(`utmify:${eventName}`, { detail: trackingData }));
+
+      // 3. Facebook Pixel Fallback
+      if (typeof (window as any).fbq === 'function') {
+        try { (window as any).fbq('track', eventName, trackingData); sent = true; } catch (e) { }
+      }
+
+      // 4. Data Layer Fallback
+      if (typeof (window as any).dataLayer !== 'undefined' && Array.isArray((window as any).dataLayer)) {
+        (window as any).dataLayer.push({ event: eventName, ...trackingData });
+        sent = true;
+      }
+
+      return sent;
+    };
+
+    // Se não enviou por canais diretos, joga na fila para tentar depois
+    if (!trySend()) {
+      eventQueue.current.push({ name: eventName, data: trackingData });
     }
   }, [email, phone, name, amount]);
 
-  // Disparar "InitiateCheckout" assim que o usuário começar a preencher qualquer campo
+  // Processador da fila de eventos (tenta disparar a cada 2 segundos se a fila não estiver vazia)
   useEffect(() => {
-    if (!hasTrackedInitiate && (name.trim().length > 0 || email.trim().length > 0 || phone.trim().length > 0)) {
-      fireTrackingEvent('InitiateCheckout');
-      setHasTrackedInitiate(true);
+    const timer = setInterval(() => {
+      if (eventQueue.current.length === 0) return;
+
+      console.log(`[Tracking] Tentando processar fila de ${eventQueue.current.length} eventos...`);
+      const remaining: typeof eventQueue.current = [];
+
+      eventQueue.current.forEach(evt => {
+        let sent = false;
+        try {
+          if (typeof (window as any).utmify === 'function') {
+            (window as any).utmify(evt.name, evt.data);
+            sent = true;
+          } else if ((window as any).utmify?.send) {
+            (window as any).utmify.send(evt.name, evt.data);
+            sent = true;
+          }
+
+          if (typeof (window as any).fbq === 'function') {
+            (window as any).fbq('track', evt.name, evt.data);
+            sent = true;
+          }
+        } catch (e) { }
+
+        if (!sent) remaining.push(evt);
+        else console.log(`[Tracking] Evento ${evt.name} enviado da fila com sucesso.`);
+      });
+
+      eventQueue.current = remaining;
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Listener para o primeiro foco ou tecla em qualquer campo (Trigger imediato de IC)
+  useEffect(() => {
+    const handleTrigger = () => {
+      if (!hasTrackedInitiate.current) {
+        hasTrackedInitiate.current = true;
+        console.log("[Tracking] InitiateCheckout disparado por interação");
+        fireTrackingEvent('InitiateCheckout', {
+          product_name: displayProduct.name,
+          product_price: amount
+        });
+      }
+    };
+
+    // Monitora foco e inputs
+    const container = document.getElementById('checkout-form-container');
+    if (container) {
+      container.addEventListener('focusin', handleTrigger, { once: true });
+      container.addEventListener('input', handleTrigger, { once: true });
+      return () => {
+        container.removeEventListener('focusin', handleTrigger);
+        container.removeEventListener('input', handleTrigger);
+      };
     }
-  }, [name, email, phone, hasTrackedInitiate, fireTrackingEvent]);
+  }, [fireTrackingEvent, displayProduct.name, amount]);
+
+  // Fallback: Disparar se os campos forem preenchidos (ex: via preenchimento automático)
+  useEffect(() => {
+    if (!hasTrackedInitiate.current && (name.trim().length > 3 || email.trim().length > 5)) {
+      hasTrackedInitiate.current = true;
+      fireTrackingEvent('InitiateCheckout', {
+        product_name: displayProduct.name,
+        product_price: amount,
+        trigger: 'field_prefill'
+      });
+    }
+  }, [name, email, fireTrackingEvent, displayProduct.name, amount]);
 
   useEffect(() => {
     if (mode !== "public") return;
@@ -595,12 +719,16 @@ export function CheckoutShell({
     // Gateway de Pix: respeita a seleção exclusiva do produto
     let pixGateway: string | null = null;
 
-    if (isMundPayActive && method === 'pix') {
+    if (product?.use_buypix && isBuyPixActive && method === 'pix') {
+      pixGateway = 'buypix';
+    } else if (isMundPayActive && method === 'pix' && (product?.mundpay_enabled || product?.mundpay_url)) {
       // Se mundpay_enabled está true ou é legado (tem URL e enabled não é false)
       pixGateway = 'mundpay';
-    } else if (product?.pushinpay_enabled && isPushinPayActive) {
+    } else if (product?.pushinpay_enabled && isPushinPayActive && method === 'pix') {
       pixGateway = 'pushinpay';
-    } else if (isPushinPayActive) {
+    } else if (isBuyPixActive && method === 'pix') {
+      pixGateway = 'buypix';
+    } else if (isPushinPayActive && method === 'pix') {
       // Fallback global se nada estiver configurado no produto
       pixGateway = 'pushinpay';
     }
@@ -627,7 +755,8 @@ export function CheckoutShell({
         recaptcha_token,
         cpf: cpf || undefined,
         phone: phone || undefined,
-        mundpay_url: displayProduct.mundpay_url
+        mundpay_url: displayProduct.mundpay_url,
+        buypix_redirect_url: (displayProduct as any).buypix_redirect_url
       });
 
       if (method === 'pix') {
@@ -743,7 +872,7 @@ export function CheckoutShell({
           </div>
         )}
 
-        <div className="sco-cols">
+        <div className="sco-cols" id="checkout-form-container">
           <aside className="sco-left">
 
             <div className="sco-sum-product">

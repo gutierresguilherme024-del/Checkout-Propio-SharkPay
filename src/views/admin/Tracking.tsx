@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { integrationService } from "@/lib/integrations";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -58,25 +59,67 @@ export default function AdminTracking() {
   const [configOpen, setConfigOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [logs, setLogs] = useState<EventLog[]>(() => [
-    { id: "evt_1", name: "conversion", status: "sent", createdAt: "2026-02-24 10:01" },
-    { id: "evt_2", name: "pageview", status: "sent", createdAt: "2026-02-24 09:58" },
-  ]);
+  const [logs, setLogs] = useState<EventLog[]>([]);
 
   // Carregar configurações reais
   useEffect(() => {
     async function load() {
+      // 1. Carregar Configurações
       const configs = await integrationService.getSettings('tracking');
       const utmify = configs.find(c => c.id === 'utmify');
+
+      const envKey = import.meta.env.VITE_UTMIFY_API_KEY || "";
+      const isRealEnv = envKey && !envKey.includes('placeholder');
+
       if (utmify) {
-        setApiKey(String(utmify.config.apiKey || ""));
+        setApiKey(String(utmify.config.apiKey || (isRealEnv ? envKey : "")));
         setPixelId(String(utmify.config.pixelId || ""));
         setUtmScript(String(utmify.config.utmScript || ""));
         setEnabled(utmify.enabled);
+      } else if (isRealEnv) {
+        setApiKey(envKey);
+        setEnabled(true);
       }
+
+      // 2. Carregar Logs Reais
+      const { data: logsData } = await supabase
+        .from('logs_sistema')
+        .select('*')
+        .eq('gateway', 'tracking')
+        .order('criado_em', { ascending: false })
+        .limit(10);
+
+      if (logsData) {
+        setLogs(logsData.map((l: any) => ({
+          id: l.id.slice(0, 8),
+          name: l.evento || 'Evento',
+          status: (l.sucesso ? 'sent' : 'failed') as "sent" | "failed",
+          createdAt: new Date(l.criado_em).toLocaleString('pt-BR')
+        })));
+      }
+
       setIsLoading(false);
     }
     load();
+
+    // Inscrição Real-time para logs
+    const channel = supabase
+      .channel('tracking-logs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs_sistema', filter: 'gateway=eq.tracking' }, (payload: any) => {
+        const l = payload.new as any;
+        setLogs(prev => {
+          const newLog: EventLog = {
+            id: l.id.slice(0, 8),
+            name: l.evento || 'Evento',
+            status: (l.sucesso ? 'sent' : 'failed') as "sent" | "failed",
+            createdAt: new Date(l.criado_em).toLocaleString('pt-BR')
+          };
+          return [newLog, ...prev].slice(0, 10);
+        });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const connection = useMemo(() => {

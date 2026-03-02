@@ -2,19 +2,60 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { NavLink } from "@/components/NavLink";
-import { CheckCircle2, Download, ArrowLeft, Loader2, Mail } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Loader2, Mail } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 
 export default function Sucesso() {
     const [searchParams] = useSearchParams();
     const sessionId = searchParams.get("session_id");
     const pedidoId = searchParams.get("pedido");
     const [loading, setLoading] = useState(true);
+    const [orderData, setOrderData] = useState<any>(null);
 
     useEffect(() => {
-        // Simular verificação do pagamento
-        const timer = setTimeout(() => setLoading(false), 1500);
-        return () => clearTimeout(timer);
-    }, []);
+        async function trackPurchase() {
+            if (!pedidoId) {
+                setLoading(false);
+                return;
+            }
+
+            const { data } = await supabase
+                .from('pedidos')
+                .select('*')
+                .eq('id', pedidoId)
+                .single();
+
+            if (data) {
+                setOrderData(data);
+
+                // --- DISPARO DE TRACKING ---
+                const eventPayload = {
+                    event: 'Purchase',
+                    value: data.valor,
+                    currency: 'BRL',
+                    pedido_id: data.id,
+                    email: data.email_comprador || data.email,
+                    nome: data.nome_comprador || data.nome
+                };
+
+                // 1. UTMify (Janela global)
+                if ((window as any).utmHelper) {
+                    (window as any).utmHelper.send('Purchase', eventPayload);
+                }
+
+                // 2. Auditoria Interna
+                await supabase.from('logs_sistema').insert({
+                    tipo: 'audit',
+                    gateway: 'tracking',
+                    evento: 'Purchase',
+                    pedido_id: data.id,
+                    mensagem: `Venda de R$ ${data.valor} (${data.metodo_pagamento}) rastreada no sucesso.`
+                });
+            }
+            setLoading(false);
+        }
+        trackPurchase();
+    }, [pedidoId]);
 
     if (loading) {
         return (

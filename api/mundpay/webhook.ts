@@ -22,30 +22,65 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ ok: true, message: 'Recebido, mas sem Pedido ID' })
     }
 
-    // Status comuns de aprovação: 'paid', 'approved', 'succeeded', 'pago'
-    const statusSucesso = ['paid', 'approved', 'succeeded', 'pago', 'sale_approved'];
-
-    if (!statusSucesso.includes(status)) {
-        console.log(`[MundPay Webhook] Status ${status} ignorado para o pedido ${pedidoId}`);
-        return res.status(200).json({ ok: true, message: `Status ${status} recebido` })
-    }
+    // Status comuns de aprovação
+    const statusSucesso = ['paid', 'approved', 'succeeded', 'pago', 'sale_approved', 'aprovado'];
 
     try {
-        // 1. Atualizar pedido no banco
-        const { data: pedido, error: updateError } = await supabase
+        // 1. Tentar encontrar o pedido
+        let finalPedidoId = pedidoId;
+        let pedido: any = null;
+
+        if (finalPedidoId) {
+            const { data } = await supabase.from('pedidos').select('*').eq('id', finalPedidoId).single();
+            pedido = data;
+        }
+
+        // FALLBACK: Se não encontrou por ID, tenta por Valor + Email (Evita perdas na MundPay/Scraper)
+        if (!pedido && payload.amount && (payload.customer?.email || payload.email)) {
+            const emailBusca = (payload.customer?.email || payload.email).toLowerCase();
+            const valorBusca = payload.amount || payload.valor;
+
+            const { data: fallbackData } = await supabase
+                .from('pedidos')
+                .select('*')
+                .eq('status', 'pendente')
+                .eq('valor', valorBusca)
+                .ilike('email', emailBusca)
+                .order('criado_em', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (fallbackData) {
+                pedido = fallbackData;
+                finalPedidoId = fallbackData.id;
+            }
+        }
+
+        // LOG DE RECEBIMENTO
+        await supabase.from('logs_sistema').insert({
+            tipo: 'webhook',
+            gateway: 'mundpay',
+            evento: status,
+            pedido_id: finalPedidoId || null,
+            payload: payload,
+            mensagem: pedido
+                ? `Webhook MundPay associado ao pedido ${finalPedidoId} (${status})`
+                : `Webhook MundPay recebido SUB-ÓTIMO (Pedido não localizado): ${status}`
+        } as any);
+
+        if (!statusSucesso.includes(status)) return res.status(200).json({ ok: true });
+        if (!pedido) return res.status(200).json({ ok: true, warn: 'Pedido não localizado para aprovação' });
+
+        // 2. Atualizar pedido
+        const { error: updateError } = await supabase
             .from('pedidos')
             .update({
                 status: 'pago',
                 pago_em: new Date().toISOString()
             })
-            .eq('id', pedidoId)
-            .eq('status', 'pendente')
-            .select()
-            .single()
+            .eq('id', finalPedidoId);
 
-        if (updateError) {
-            console.error('[MundPay Webhook] Erro ao atualizar pedido:', updateError)
-        }
+        if (updateError) throw updateError;
 
         // 2. Notificar N8N para automação (entrega de produto)
         const n8nUrl = process.env.N8N_WEBHOOK_URL || process.env.VITE_N8N_WEBHOOK_URL
@@ -74,6 +109,14 @@ export default async function handler(req: any, res: any) {
         return res.status(200).json({ ok: true, message: 'Pagamento MundPay confirmado' })
     } catch (error: any) {
         console.error('[MundPay Webhook] Erro:', error)
+        await supabase.from('logs_sistema').insert({
+            tipo: 'webhook',
+            gateway: 'mundpay',
+            evento: 'erro_webhook',
+            pedido_id: pedidoId,
+            sucesso: false,
+            mensagem: `Erro no processamento do webhook: ${error.message}`
+        } as any)
         return res.status(500).json({ ok: false, message: error.message })
     }
 }
