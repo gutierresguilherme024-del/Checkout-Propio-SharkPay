@@ -198,7 +198,12 @@ export default function AdminPayments() {
         states.buypix = false; // Começa como desativado se for novo
       } else if (values.buypix && values.buypix.buypix_api_key) {
         // Se já tem chave, consideramos configurado (UI badge)
-        states.buypix = states.buypix ?? true;
+        states.buypix = itemEnabled(payments, 'buypix') || true;
+      }
+
+      function itemEnabled(list: any[], id: string) {
+        const i = list.find(x => x.id === id);
+        return i ? i.enabled : false;
       }
 
       setActiveStates(states);
@@ -211,11 +216,21 @@ export default function AdminPayments() {
   const handleSave = async (id: string) => {
     const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;
 
+    let isEnabled = activeStates[id];
+    // Auto-ativa se houver chaves inseridas mas o toggle estiver desligado
+    if (id === 'buypix' && configValues[id]?.buypix_api_key) {
+      isEnabled = true;
+      setActiveStates(prev => ({ ...prev, [id]: true }));
+    } else if (id === 'pushinpay' && configValues[id]?.apiToken) {
+      isEnabled = true;
+      setActiveStates(prev => ({ ...prev, [id]: true }));
+    }
+
     await integrationService.saveSettings({
       id,
       type: 'payment',
       name: integ.name,
-      enabled: activeStates[id],
+      enabled: isEnabled,
       config: configValues[id] || {},
       user_id: session?.user?.id
     });

@@ -27,7 +27,18 @@ export const integrationService = {
             return local ? JSON.parse(local) : [];
         }
 
-        const results = data || [];
+        let results = data || [];
+
+        // Remoção de duplicatas por ID, priorizando (1) ativas globais ou (2) last_updated
+        if (!userId) {
+            const map = new Map();
+            for (const row of results) {
+                const curr = map.get(row.id);
+                if (!curr) { map.set(row.id, row); }
+                else if (row.enabled && !curr.enabled) { map.set(row.id, row); }
+            }
+            results = Array.from(map.values());
+        }
 
         // Injeção de ENV Fallbacks (Somente se a lista estiver vazia ou faltando o ID específico)
         if (type === 'tracking' && !results.find(r => r.id === 'utmify')) {
