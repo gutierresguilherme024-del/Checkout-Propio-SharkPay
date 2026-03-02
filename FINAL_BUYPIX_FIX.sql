@@ -50,17 +50,22 @@ CREATE POLICY "Public read integrations" ON public.integrations
 FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Admin manage integrations" ON public.integrations;
+-- Role: authenticated (Admins) can manage their own or global records
 CREATE POLICY "Admin manage integrations" ON public.integrations 
-FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL);
+FOR ALL TO authenticated 
+USING (auth.uid() = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 
 -- 7. POLÍTICAS DE ACESSO (PRODUTOS - RECUPERAÇÃO DE VISIBILIDADE)
 DROP POLICY IF EXISTS "Public read active products" ON public.produtos;
 CREATE POLICY "Public read active products" ON public.produtos 
-FOR SELECT USING (true); -- No checkout todos precisam ver o produto
+FOR SELECT USING (true); 
 
 DROP POLICY IF EXISTS "Admin manage products" ON public.produtos;
 CREATE POLICY "Admin manage products" ON public.produtos 
-FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL); -- Ver os dele e os legados
+FOR ALL TO authenticated 
+USING (auth.uid() = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 
 -- 8. POLÍTICAS DE ACESSO (PEDIDOS)
 DROP POLICY IF EXISTS "Public insert orders" ON public.pedidos;
@@ -69,7 +74,9 @@ FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Admin manage orders" ON public.pedidos;
 CREATE POLICY "Admin manage orders" ON public.pedidos 
-FOR ALL TO authenticated USING (auth.uid() = user_id OR user_id IS NULL);
+FOR ALL TO authenticated 
+USING (auth.uid() = user_id OR user_id IS NULL)
+WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
 
 -- 9. PERMISSÕES FINAIS
 GRANT ALL ON TABLE public.integrations TO anon, authenticated, service_role;
@@ -81,4 +88,4 @@ INSERT INTO public.integrations (id, type, name, enabled, config)
 VALUES ('buypix', 'payment', 'BuyPix', false, '{"buypix_api_key": "", "buypix_webhook_secret": ""}')
 ON CONFLICT (id, user_id) DO NOTHING;
 
--- ✅ Script v2.5.6 executado! (Reparo de Visibilidade)
+-- ✅ Script v2.5.7 executado! (Reparo de Escrita RLS)
