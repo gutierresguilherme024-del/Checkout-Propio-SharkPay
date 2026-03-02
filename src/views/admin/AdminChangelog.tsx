@@ -23,7 +23,7 @@ const versions: Version[] = [
     {
         version: '2.5.4',
         name: 'Final BuyPix Fix: Busca Agressiva & SQL Sync',
-        keywords: ['BuyPix', 'Gateway-Cascata', 'SQL-Integrations', 'Checkout-Shell'],
+        keywords: ['BuyPix', 'Gateway-Cascata', 'SQL-Integrations', 'Checkout-Shell', 'Schema-Repair'],
         type: 'correcao',
         status: 'concluido',
     },
