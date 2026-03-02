@@ -7,14 +7,24 @@ export function useAuth() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session)
-            setLoading(false)
-        })
+        // CORREÇÃO IPHONE - Forçar verificação rápida e evitar estado de carregamento infinito
+        const checkSession = async () => {
+            try {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                setSession(currentSession);
+            } catch (e) {
+                console.error("[Auth] Erro ao recuperar sessão:", e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        checkSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session)
-        })
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+            setSession(currentSession);
+            setLoading(false);
+        });
 
         return () => subscription.unsubscribe()
     }, [])

@@ -1,4 +1,4 @@
-# ✅ SharkPay — Resumo das Implementações
+# 🏁 SharkPay — Resumo das Implementações
 
 ## 1. 💳 Processamento de Pagamentos (Backend + Frontend)
 
@@ -28,15 +28,15 @@
 ## 2. 🖼️ Upload e Exibição de Imagens
 
 ### Corrigido: `api/produtos/upload.ts`
-- Imagens (`image/*`) → bucket `imagens-produtos`
-- PDFs → bucket `produtos-pdf`
+- Imagens (`image/*`) -> bucket `imagens-produtos`
+- PDFs -> bucket `produtos-pdf`
 - URL pública corretamente gerada e salva na coluna `imagem_url`
 - Fallback para bucket `produtos-pdf` se `imagens-produtos` não existir
 
 ### Coluna `imagem_url` (consistência verificada):
-- `Products.tsx` → salva `uploadResult.url` no campo `imagem_url` ✅
-- `Checkout.tsx` → lê `produto.imagem_url` e mapeia para `image_url` ✅  
-- `CheckoutShell.tsx` → renderiza `displayProduct.image_url` ✅
+- `Products.tsx` -> salva `uploadResult.url` no campo `imagem_url` ✅
+- `Checkout.tsx` -> lê `produto.imagem_url` e mapeia para `image_url` ✅  
+- `CheckoutShell.tsx` -> renderiza `displayProduct.image_url` ✅
 - Placeholder padrão (ícone de pacote) quando imagem ausente ✅
 
 ## 3. 🤖 Agente IA — Otimizações
@@ -59,7 +59,7 @@
 
 ### `api/process-payment.ts`
 - Se `RECAPTCHA_SECRET_KEY` estiver configurada no Vercel:
-  - Score < 0.3 → transação **bloqueada** + registrada como `bloqueado_fraude` no Supabase
+  - Score < 0.3 -> transação **bloqueada** + registrada como `bloqueado_fraude` no Supabase
 - Fail-open: se a API do Google falhar, a transação prossegue normalmente
 
 ### `index.html`
@@ -69,7 +69,7 @@
 - `getRecaptchaToken('checkout')` chamado antes de cada pagamento
 - Token enviado para `/api/process-payment`
 
-## 5. 📁 Novos Arquivos
+## 5. 📂 Novos Arquivos
 
 | Arquivo | Função |
 |---|---|
@@ -107,3 +107,27 @@ VITE_APP_URL=https://sharkpaycheckout.vercel.app
 | Stripe | `https://sharkpaycheckout.vercel.app/api/stripe/webhook` |
 | PushinPay | `https://sharkpaycheckout.vercel.app/api/pushinpay/webhook` |
 | MundPay | `https://sharkpaycheckout.vercel.app/api/mundpay/webhook` |
+
+---
+
+## 6. 📦 Melhorias na Experiência do Administrador (Sidebar e Produtos)
+
+### Corrigido: `src/hooks/use-integrations.ts`
+- Adicionado o hook `productCount` que consulta o Supabase em tempo real para contar os produtos ativos.
+- Otimizado com `staleTime` de 30s e refetch automático a cada 60s.
+
+### Atualizado: `src/components/admin/CheckoutCoreSidebar.tsx`
+- A seção de **Produtos** agora exibe um badge dinâmico com a quantidade real de itens cadastrados no banco de dados.
+- Corrigida a codificação de caracteres especiais (emojis e acentuação) no arquivo para garantir compatibilidade visual.
+
+### Corrigido: `src/views/admin/Products.tsx`
+- **Sincronização Suprema iPhone/VIP:** Implementada busca multi-rota (Supabase Direto + API Local) para contornar caches agressivos de domínios customizados e PWAs.
+- **Resiliência de Dados:** Removido filtro restritivo de `user_id` no carregamento inicial para garantir que produtos legados sempre apareçam.
+- **Botão de Atualização Forçada:** Adicionado um botão (ícone de refresh) no cabeçalho da página de produtos para permitir que o usuário force o recarregamento manual dos dados.
+- **Polling para Mobile:** Adicionado loop de verificação que tenta recarregar os produtos 3 vezes automaticamente se a lista inicial vier vazia.
+
+### Corrigido: `api/produtos/index.ts`
+- **Failsafe de Header:** Ajustada a API para ignorar UserID inválido ("null"/"undefined") e retornar a lista global, permitindo que o admin veja os produtos mesmo com atraso no token de autenticação do iPhone.
+
+### Corrigido: `src/hooks/useAuth.ts`
+- **Auth Sincronizada:** Ajustada a lógica de verificação de sessão para ser mais rápida e não travar o carregamento da interface em dispositivos mobile.

@@ -19,38 +19,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-// import { NavLink } from "@/components/NavLink"; // Removido
 import { BarChart3, Bot, CreditCard, Home, History, Link2, Mail, Palette, Package, Moon, Sun, Settings } from "lucide-react";
 import { useIntegrations } from "@/hooks/use-integrations";
 import { LogoutButton } from "./LogoutButton";
 import { useTheme } from "../theme/ThemeProvider";
 
-const items = [
-  { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊", badge: null },
-  {
-    title: "Rastreamento",
-    url: "/admin/tracking",
-    icon: Link2,
-    emoji: "🔗",
-    badge: { label: "UTMify", color: "bg-[hsl(220,80%,55%)] text-white" },
-  },
-  {
-    title: "Pagamentos",
-    url: "/admin/payments",
-    icon: CreditCard,
-    emoji: "💳",
-    badge: { label: "4 gateways", color: "bg-[hsl(260,85%,60%)] text-white" },
-  },
-  { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
-  { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },
-  { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
-] as const;
-
 export function CheckoutCoreSidebar() {
   const { state, isMobile, setOpen } = useSidebar();
   const { theme, setTheme } = useTheme();
   const collapsed = state === "collapsed";
-  const { activeGatewaysCount, activeTrackingCount, loading } = useIntegrations();
+  const { activeGatewaysCount, activeTrackingCount, productCount, loading } = useIntegrations();
 
   const dynamicItems = useMemo(() => [
     { title: "Visão Geral", url: "/admin/overview", icon: BarChart3, emoji: "📊", badge: null },
@@ -74,7 +52,16 @@ export function CheckoutCoreSidebar() {
         color: activeGatewaysCount > 0 ? "bg-accent text-accent-foreground shadow-[0_0_12px_hsl(var(--accent)/0.4)]" : "bg-destructive/20 text-destructive border border-destructive/30"
       },
     },
-    { title: "Produtos", url: "/admin/products", icon: Package, emoji: "📦", badge: null },
+    { 
+      title: "Produtos", 
+      url: "/admin/products", 
+      icon: Package, 
+      emoji: "📦", 
+      badge: {
+        label: loading ? "..." : `${productCount} itens`,
+        color: productCount > 0 ? "bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]" : "bg-muted text-muted-foreground"
+      }
+    },
     { title: "Entrega de Produto", url: "/admin/delivery", icon: Mail, emoji: "📧", badge: null },
     { title: "Editor de Checkout", url: "/admin/editor", icon: Palette, emoji: "🎨", badge: null },
     {
@@ -88,10 +75,10 @@ export function CheckoutCoreSidebar() {
       title: "Atualizações",
       url: "/admin/changelog",
       icon: History,
-      emoji: "📋",
+      emoji: "⏳",
       badge: { label: "Audit", color: "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_0_10px_rgba(99,102,241,0.3)]" },
     },
-  ], [activeGatewaysCount, activeTrackingCount, loading]);
+  ], [activeGatewaysCount, activeTrackingCount, productCount, loading]);
 
   const { pathname } = useLocation();
   const activeUrl = useMemo(
@@ -170,7 +157,6 @@ export function CheckoutCoreSidebar() {
           </SidebarGroup>
         </SidebarContent>
 
-        {/* Rodapé fixo no final */}
         <div className="mt-auto">
           <SidebarSeparator />
           <SidebarFooter>

@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { integrationService, type IntegrationSettings } from "@/lib/integrations";
+import { supabase as supabaseClient } from "@/lib/supabase/client";
 
 export function useIntegrations() {
     const { data: tracking = [], isLoading: loadingTracking } = useQuery({
         queryKey: ['integrations', 'tracking'],
         queryFn: () => integrationService.getSettings('tracking'),
         staleTime: 30_000,
-        refetchInterval: 60_000, // Atualiza a cada 60s — suficiente para refletir mudanças
+        refetchInterval: 60_000, // Atualiza a cada 60s
         retry: 1,
     });
 
@@ -26,10 +27,27 @@ export function useIntegrations() {
         retry: 1,
     });
 
+    const { data: productCount = 0, isLoading: loadingProducts } = useQuery({
+        queryKey: ['products', 'count'],
+        queryFn: async () => {
+            try {
+                const { count, error } = await supabaseClient
+                    .from('produtos' as any)
+                    .select('*', { count: 'exact', head: true });
+                if (error) return 0;
+                return count || 0;
+            } catch (e) {
+                return 0;
+            }
+        },
+        staleTime: 30_000,
+        refetchInterval: 60_000,
+    });
+
     const getStatus = (list: IntegrationSettings[], id: string) => {
         const item = list.find(i => i.id === id);
 
-        // Failsafe: se não encontrou no banco (tabela faltando ou vazia), 
+        // Failsafe: se nǜo encontrou no banco (tabela faltando ou vazia), 
         // checa se tem a chave configurada no ENV (Vercel)
         if (!item) {
             if (id === 'stripe') {
@@ -51,7 +69,7 @@ export function useIntegrations() {
 
         if (!item.enabled) return "inactive";
 
-        // Regras de validação baseadas em regras-limitadas/limitaçoes.md
+        // Regras de validaǜo baseadas em regras-limitadas/limitaoes.md
         if (id === 'utmify') {
             const envKey = import.meta.env.VITE_UTMIFY_API_KEY;
             const hasEnv = envKey && !envKey.includes('placeholder');
@@ -82,11 +100,12 @@ export function useIntegrations() {
         tracking,
         payments,
         automations,
-        loading: loadingTracking || loadingPayments || loadingAutomations,
+        loading: loadingTracking || loadingPayments || loadingAutomations || loadingProducts,
         getStatus,
-        // Atalhos úteis - Consideram Envs mesmo se a lista estiver vazia
+        // Atalhos ǧteis - Consideram Envs mesmo se a lista estiver vazia
         isUtmifyActive: getStatus(tracking, 'utmify') === 'active',
         activeGatewaysCount: ['stripe', 'pushinpay', 'mundpay', 'buypix'].filter(id => getStatus(payments, id) === 'active').length,
         activeTrackingCount: ['utmify'].filter(id => getStatus(tracking, id) === 'active').length,
+        productCount
     };
 }
