@@ -383,9 +383,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('pedidos')
                 .insert({
                     id: pid,
+                    pedido_id: pid,  // ✅ Campo obrigatório para compatibilidade
                     user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome,
+                    produto_nome: produto_nome || '',  // ✅ Campo obrigatório
                     valor: Number(valor),
                     metodo_pagamento: 'pix',
                     status: 'pendente',
@@ -398,7 +400,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (insertError) {
                 console.error('[mundpay] Erro ao inserir pedido:', insertError)
-                throw new Error('Falha ao registrar pedido no banco')
+                // ✅ Mostrar erro específico do Supabase (não genérico)
+                throw new Error(insertError.message || insertError.hint || 'Falha ao registrar pedido no banco')
             }
 
             // 2. Montar URL do checkout MundPay
