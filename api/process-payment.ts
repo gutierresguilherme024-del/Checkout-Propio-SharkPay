@@ -379,15 +379,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log("[mundpay] Iniciando processamento:", { email, pid, mundpay_url: mundpay_url.slice(0, 50) + '...' })
 
             // 1. Registrar pedido pendente no SharkPay
+            // ✅ Usar APENAS colunas do schema base (garantido em produção)
             const { data: insertData, error: insertError } = await supabase
                 .from('pedidos')
                 .insert({
                     id: pid,
-                    pedido_id: pid,  // ✅ Campo obrigatório para compatibilidade
-                    user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome,
-                    produto_nome: produto_nome || '',  // ✅ Campo obrigatório
                     valor: Number(valor),
                     metodo_pagamento: 'pix',
                     status: 'pendente',
@@ -400,9 +398,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             if (insertError) {
                 console.error('[mundpay] Erro ao inserir pedido:', insertError)
-                // ✅ Mostrar erro específico do Supabase (não genérico)
+                console.error('[mundpay] Detalhes do erro:', JSON.stringify(insertError, null, 2))
+                // Retornar mensagem específica do Supabase
                 throw new Error(insertError.message || insertError.hint || 'Falha ao registrar pedido no banco')
             }
+            
+            console.log('[mundpay] Pedido criado com sucesso:', pid)
 
             // 2. Montar URL do checkout MundPay
             const checkoutUrl = new URL(mundpay_url)
