@@ -20,20 +20,26 @@ async function processarPagamento(payload: Record<string, unknown>) {
       body: JSON.stringify(payload)
     });
 
-    // Tratamento para quando a API não está rodando (Vite sem Vercel CLI)
-    if (!res.ok && res.status === 404) {
-      throw new Error("API de pagamentos offline. Teste em produção ou use o comando 'vercel dev' no terminal local.");
-    }
-
     const text = await res.text();
-    if (!text) throw new Error("Resposta vazia da API de pagamentos.");
+    if (!text) throw new Error("Resposta vazia do servidor de pagamentos.");
 
     const data = JSON.parse(text);
-    if (!res.ok) throw new Error(data.error || data.erro || 'Erro no servidor de pagamentos');
+    
+    // ✅ PRIORIZA a mensagem do backend para erros 4xx (validação)
+    if (!res.ok) {
+      // Erros 400-499 são de validação/negócio — mensagem do servidor é mais importante
+      if (res.status >= 400 && res.status < 500) {
+        throw new Error(data.error || data.message || 'Dados inválidos. Verifique os campos e tente novamente.');
+      }
+      // Erros 500+ são do servidor — mensagem genérica
+      throw new Error('Erro no servidor de pagamentos. Tente novamente em instantes.');
+    }
+    
     return data;
   } catch (err: any) {
+    // Se for erro de parse JSON, pode ser problema de rede/CORS
     if (err.name === 'SyntaxError' || err.message.includes('JSON')) {
-      throw new Error("Falha ao se conectar com a API de pagamentos no ambiente local.");
+      throw new Error("Não foi possível conectar ao servidor de pagamentos. Verifique sua conexão.");
     }
     throw err;
   }
@@ -695,13 +701,23 @@ export function CheckoutShell({
   const hue = settings.primaryHue;
 
   const onPay = async () => {
-    if (!name.trim() || !email.trim() || !email.includes("@") || (isMundPayActive && (!cpf.trim() || !phone.trim()))) {
+    // ✅ Validação de nome completo no frontend (antes de chamar API)
+    const nomePartes = name.trim().split(/\s+/).filter(Boolean);
+    const nomeValido = nomePartes.length >= 2 && nomePartes.every(p => p.length >= 2);
+    
+    if (!name.trim() || !nomeValido || !email.trim() || !email.includes("@") || (isMundPayActive && (!cpf.trim() || !phone.trim()))) {
       setErrors({
-        name: !name.trim() ? "Obrigatório" : "",
+        name: !name.trim() ? "Obrigatório" : !nomeValido ? "Preencha nome e sobrenome completos" : "",
         email: !email.trim() || !email.includes("@") ? "E-mail inválido" : "",
         cpf: isMundPayActive && !cpf.trim() ? "Obrigatório" : "",
         phone: isMundPayActive && !phone.trim() ? "Obrigatório" : ""
       });
+      
+      // Toast amigável para nome incompleto
+      if (!nomeValido) {
+        toast.error("Preencha o nome completo com nome e sobrenome");
+      }
+      
       return;
     }
 
@@ -791,7 +807,17 @@ export function CheckoutShell({
     } catch (err: any) {
       // Fechar popup vazio em caso de erro
       if (mundpayPopup && !mundpayPopup.closed) mundpayPopup.close();
-      toast.error(err.message || 'Erro ao processar pagamento');
+      
+      // ✅ Prioriza mensagem do backend (já tratada em processarPagamento)
+      const errorMsg = err.message || 'Erro ao processar pagamento';
+      
+      // Se for erro de validação de nome, marca o campo e exibe mensagem amigável
+      if (errorMsg.toLowerCase().includes('nome') && errorMsg.toLowerCase().includes('sobrenome')) {
+        setErrors(prev => ({ ...prev, name: "Nome e sobrenome obrigatórios" }));
+        toast.error("Preencha o nome completo com nome e sobrenome");
+      } else {
+        toast.error(errorMsg);
+      }
     } finally {
       setIsGeneratingPix(false);
     }
