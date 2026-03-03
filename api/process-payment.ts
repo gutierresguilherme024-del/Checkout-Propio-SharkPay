@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createPayment } from '../core/paymentRouter'
+// import { createPayment } from '../core/paymentRouter' // REMOVIDO: causando erro de build no Vercel
 
 // ─── reCAPTCHA Validator ──────────────────────────────────
 async function validarRecaptcha(token: string, secret: string): Promise<{ ok: boolean; score: number }> {
@@ -367,17 +367,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         try {
             console.log("DEBUG BODY COMPLETO:", req.body)
-            const response = await createPayment('mundpay', {
-                ...req.body,
-                pid,
-                checkout_slug,
-                utm_source,
-                productOwnerId,
-                supabase
+            
+            // Implementação inline do MundPay (removido createPayment para fix build Vercel)
+            const { cpf, phone, mundpay_url } = req.body;
+            
+            if (!mundpay_url) {
+                throw new Error('URL do checkout MundPay não configurada para este produto.');
+            }
+
+            // 1. Registrar pedido pendente no SharkPay
+            const { data: insertData, error: insertError } = await supabase
+                .from('pedidos')
+                .insert({
+                    id: pid,
+                    user_id: productOwnerId,
+                    email_comprador: email,
+                    nome_comprador: nome,
+                    valor: Number(valor),
+                    metodo_pagamento: 'pix',
+                    status: 'pendente',
+                    gateway: 'mundpay',
+                    utm_source: utm_source || null,
+                    checkout_slug: checkout_slug || null
+                })
+                .select()
+                .single()
+
+            if (insertError) {
+                console.error('[mundpay] Erro ao inserir pedido:', insertError)
+                throw new Error('Falha ao registrar pedido no banco')
+            }
+
+            // 2. Montar URL do checkout MundPay
+            const checkoutUrl = new URL(mundpay_url)
+            if (nome) checkoutUrl.searchParams.set('name', nome)
+            if (email) checkoutUrl.searchParams.set('email', email)
+            if (cpf) {
+                const cpfLimpo = cpf.replace(/\D/g, '')
+                checkoutUrl.searchParams.set('document', cpfLimpo)
+                checkoutUrl.searchParams.set('cpf', cpfLimpo)
+            }
+            if (phone) {
+                const phoneDigits = phone.replace(/\D/g, '')
+                checkoutUrl.searchParams.set('phone', phoneDigits)
+                checkoutUrl.searchParams.set('phone_number', phoneDigits)
+            }
+            checkoutUrl.searchParams.set('locale', 'pt_BR')
+            checkoutUrl.searchParams.set('lang', 'pt_BR')
+            checkoutUrl.searchParams.set('currency', 'BRL')
+            checkoutUrl.searchParams.set('country', 'BR')
+            checkoutUrl.searchParams.set('payment_method', 'pix')
+            checkoutUrl.searchParams.set('method', 'pix')
+            checkoutUrl.searchParams.set('pay_method', 'pix')
+            checkoutUrl.searchParams.set('external_id', pid)
+            checkoutUrl.searchParams.set('metadata[pedido_id]', pid)
+            checkoutUrl.searchParams.set('reference', pid)
+
+            // 3. LOG
+            try {
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'mundpay',
+                    evento: 'pix_gerado',
+                    pedido_id: pid,
+                    mensagem: `Checkout Pix iniciado via MundPay para ${email}`
+                } as any)
+            } catch { /* ignora */ }
+
+            return res.status(200).json({
+                checkout_url: checkoutUrl.toString(),
+                pedido_id: pid,
+                gateway: 'mundpay'
             });
 
-            return res.status(200).json(response);
         } catch (err: any) {
+            console.error('[process-payment/mundpay]:', err)
+            try {
+                await supabase.from('pedidos').update({ status: 'falhou' } as any).eq('id', pid)
+                await supabase.from('logs_sistema').insert({
+                    user_id: productOwnerId,
+                    tipo: 'gateway',
+                    gateway: 'mundpay',
+                    evento: 'pix_erro',
+                    pedido_id: pid,
+                    sucesso: false,
+                    mensagem: `Erro ao iniciar MundPay: ${err.message}`
+                } as any)
+            } catch { /* ignora */ }
             return res.status(500).json({ error: err.message || 'Erro ao processar pagamento MundPay' });
         }
     }
