@@ -379,7 +379,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log("[mundpay] Iniciando processamento:", { email, pid, mundpay_url: mundpay_url.slice(0, 50) + '...' })
 
             // 1. Registrar pedido pendente no SharkPay
-            // ✅ Usar APENAS colunas do schema base (garantido em produção)
+            // ✅ MÍNIMO ABSOLUTO de colunas (só as essenciais e garantidas)
             const { data: insertData, error: insertError } = await supabase
                 .from('pedidos')
                 .insert({
@@ -389,21 +389,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     valor: Number(valor),
                     metodo_pagamento: 'pix',
                     status: 'pendente',
-                    gateway: 'mundpay',
-                    utm_source: utm_source || null,
-                    checkout_slug: checkout_slug || null
-                })
+                    gateway: 'mundpay'
+                } as any)
                 .select()
                 .single()
 
             if (insertError) {
-                console.error('[mundpay] Erro ao inserir pedido:', insertError)
-                console.error('[mundpay] Detalhes do erro:', JSON.stringify(insertError, null, 2))
+                console.error('[mundpay] ERRO CRÍTICO ao inserir pedido:', insertError)
+                console.error('[mundpay] Código do erro:', insertError.code)
+                console.error('[mundpay] Mensagem:', insertError.message)
+                console.error('[mundpay] Detalhes:', insertError.details)
+                console.error('[mundpay] Hint:', insertError.hint)
+                console.error('[mundpay] Objeto completo:', JSON.stringify(insertError, null, 2))
+                
                 // Retornar mensagem específica do Supabase
-                throw new Error(insertError.message || insertError.hint || 'Falha ao registrar pedido no banco')
+                const mensagemErro = insertError.message || insertError.hint || insertError.details || 'Falha ao registrar pedido no banco';
+                throw new Error(`[MundPay Insert] ${mensagemErro}`);
             }
             
-            console.log('[mundpay] Pedido criado com sucesso:', pid)
+            console.log('[mundpay] ✅ Pedido criado com sucesso:', pid)
+            console.log('[mundpay] Dados do pedido:', JSON.stringify(insertData, null, 2))
 
             // 2. Montar URL do checkout MundPay
             const checkoutUrl = new URL(mundpay_url)
