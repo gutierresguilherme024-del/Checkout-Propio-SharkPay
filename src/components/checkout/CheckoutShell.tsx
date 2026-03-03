@@ -30,15 +30,15 @@ async function processarPagamento(payload: Record<string, unknown>) {
       throw new Error("Não foi possível conectar ao servidor de pagamentos. Verifique sua conexão.");
     }
     
-    // ✅ PRIORIZA a mensagem do backend para erros 4xx (validação)
+    // ✅ PRIORIZA a mensagem do backend SEMPRE (4xx e 5xx)
     if (!res.ok) {
-      // Erros 400-499 são de validação/negócio — mensagem do servidor é PRIORITÁRIA
-      if (res.status >= 400 && res.status < 500) {
-        const errorMessage = data.error || data.message || 'Dados inválidos. Verifique os campos e tente novamente.';
-        throw new Error(errorMessage);
-      }
-      // Erros 500+ são do servidor — mensagem genérica
-      throw new Error('Erro no servidor de pagamentos. Tente novamente em instantes.');
+      // Sempre usar a mensagem do servidor quando disponível
+      const errorMessage = data.error || data.message || 
+        (res.status >= 400 && res.status < 500 
+          ? 'Dados inválidos. Verifique os campos e tente novamente.' 
+          : 'Erro no servidor de pagamentos. Tente novamente em instantes.');
+      
+      throw new Error(errorMessage);
     }
     
     return data;
@@ -768,7 +768,10 @@ export function CheckoutShell({
 
     try {
       const data = await processarPagamento({
-        method, nome: name, email, valor: amount,
+        method, 
+        nome: name, 
+        email, 
+        valor: amount,
         produto_nome: displayProduct.name,
         checkout_slug: window.location.pathname.split('/checkout/')[1] || '',
         utm_source: utms.utm_source || null,
@@ -776,8 +779,9 @@ export function CheckoutShell({
         recaptcha_token,
         cpf: cpf || undefined,
         phone: phone || undefined,
-        mundpay_url: displayProduct.mundpay_url,
-        buypix_redirect_url: (displayProduct as any).buypix_redirect_url
+        // ✅ CRÍTICO: Passar mundpay_url para o backend quando gateway for MundPay
+        mundpay_url: pixGateway === 'mundpay' ? displayProduct.mundpay_url : undefined,
+        buypix_redirect_url: pixGateway === 'buypix' ? (displayProduct as any).buypix_redirect_url : undefined
       });
 
       if (method === 'pix') {
@@ -811,16 +815,21 @@ export function CheckoutShell({
       // Fechar popup vazio em caso de erro
       if (mundpayPopup && !mundpayPopup.closed) mundpayPopup.close();
       
-      // ✅ Prioriza mensagem do backend (já tratada em processarPagamento)
+      // ✅ Sempre usar a mensagem exata do erro (backend já retorna mensagem amigável)
       const errorMsg = err.message || 'Erro ao processar pagamento';
       
-      // Se for erro de validação de nome, marca o campo e exibe mensagem amigável
+      // Se for erro de validação de nome, marca o campo visualmente
       if (errorMsg.toLowerCase().includes('nome') && errorMsg.toLowerCase().includes('sobrenome')) {
         setErrors(prev => ({ ...prev, name: "Nome e sobrenome obrigatórios" }));
-        toast.error("Preencha o nome completo com nome e sobrenome");
-      } else {
-        toast.error(errorMsg);
       }
+      
+      // Se for erro de configuração do MundPay, destacar em vermelho
+      if (errorMsg.toLowerCase().includes('mundpay') && errorMsg.toLowerCase().includes('configurada')) {
+        console.error('[MundPay Config] Produto sem URL do MundPay configurada');
+      }
+      
+      // Sempre mostrar o erro real ao usuário (nunca mascarar)
+      toast.error(errorMsg, { duration: 6000 });
     } finally {
       setIsGeneratingPix(false);
     }

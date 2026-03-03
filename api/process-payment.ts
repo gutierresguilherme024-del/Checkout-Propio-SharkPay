@@ -365,15 +365,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
         }
 
+        // Validar se mundpay_url foi enviado (erro de configuração = 400, não 500)
+        const { cpf, phone, mundpay_url } = req.body;
+        
+        if (!mundpay_url) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'URL do checkout MundPay não configurada para este produto. Configure o MundPay no painel admin.' 
+            });
+        }
+
         try {
-            console.log("DEBUG BODY COMPLETO:", req.body)
-            
-            // Implementação inline do MundPay (removido createPayment para fix build Vercel)
-            const { cpf, phone, mundpay_url } = req.body;
-            
-            if (!mundpay_url) {
-                throw new Error('URL do checkout MundPay não configurada para este produto.');
-            }
+            console.log("[mundpay] Iniciando processamento:", { email, pid, mundpay_url: mundpay_url.slice(0, 50) + '...' })
 
             // 1. Registrar pedido pendente no SharkPay
             const { data: insertData, error: insertError } = await supabase
@@ -443,8 +446,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         } catch (err: any) {
             console.error('[process-payment/mundpay]:', err)
+            
+            // Log de erro detalhado
             try {
-                await supabase.from('pedidos').update({ status: 'falhou' } as any).eq('id', pid)
+                await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
                 await supabase.from('logs_sistema').insert({
                     user_id: productOwnerId,
                     tipo: 'gateway',
@@ -452,10 +457,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     evento: 'pix_erro',
                     pedido_id: pid,
                     sucesso: false,
-                    mensagem: `Erro ao iniciar MundPay: ${err.message}`
+                    mensagem: `Erro ao iniciar MundPay: ${err.message}`,
+                    payload: { erro_stack: err.stack }
                 } as any)
             } catch { /* ignora */ }
-            return res.status(500).json({ error: err.message || 'Erro ao processar pagamento MundPay' });
+            
+            // Retornar mensagem específica do erro (nunca genérica)
+            const mensagemErro = err.message || 'Erro desconhecido ao processar pagamento MundPay';
+            return res.status(500).json({ 
+                success: false,
+                error: mensagemErro 
+            });
         }
     }
 
