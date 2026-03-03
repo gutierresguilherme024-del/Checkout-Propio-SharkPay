@@ -21,15 +21,21 @@ async function processarPagamento(payload: Record<string, unknown>) {
     });
 
     const text = await res.text();
-    if (!text) throw new Error("Resposta vazia do servidor de pagamentos.");
-
-    const data = JSON.parse(text);
+    
+    // ✅ Parse do JSON (se falhar, é erro de conexão/rede)
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      throw new Error("Não foi possível conectar ao servidor de pagamentos. Verifique sua conexão.");
+    }
     
     // ✅ PRIORIZA a mensagem do backend para erros 4xx (validação)
     if (!res.ok) {
-      // Erros 400-499 são de validação/negócio — mensagem do servidor é mais importante
+      // Erros 400-499 são de validação/negócio — mensagem do servidor é PRIORITÁRIA
       if (res.status >= 400 && res.status < 500) {
-        throw new Error(data.error || data.message || 'Dados inválidos. Verifique os campos e tente novamente.');
+        const errorMessage = data.error || data.message || 'Dados inválidos. Verifique os campos e tente novamente.';
+        throw new Error(errorMessage);
       }
       // Erros 500+ são do servidor — mensagem genérica
       throw new Error('Erro no servidor de pagamentos. Tente novamente em instantes.');
@@ -37,10 +43,7 @@ async function processarPagamento(payload: Record<string, unknown>) {
     
     return data;
   } catch (err: any) {
-    // Se for erro de parse JSON, pode ser problema de rede/CORS
-    if (err.name === 'SyntaxError' || err.message.includes('JSON')) {
-      throw new Error("Não foi possível conectar ao servidor de pagamentos. Verifique sua conexão.");
-    }
+    // Re-lança o erro sem modificar (já foi tratado acima)
     throw err;
   }
 }
