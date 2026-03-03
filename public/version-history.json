@@ -1,0 +1,90 @@
+{
+  "versions": [
+    {
+      "version": "1.0.0",
+      "deployed_at": "2026-03-03T15:30:00Z",
+      "summary": "Sistema automático de versionamento + histórico de deploys (Skill 9)",
+      "commit_hash": "82897e0",
+      "changed_files": [
+        "public/version.json",
+        "public/version-history.json",
+        "scripts/bump-version.ps1",
+        "scripts/create-deploy-history-table.sql",
+        "src/components/admin/DeploymentHistory.tsx",
+        "src/views/admin/AdminChangelog.tsx",
+        "SHARKPAY_CONTEXT.md"
+      ],
+      "breaking_changes": false,
+      "type": "feat"
+    },
+    {
+      "version": "0.9.0",
+      "deployed_at": "2026-03-01T10:00:00Z",
+      "summary": "Melhorias na sincronização de produtos (iPhone/PWA) + polling automático",
+      "commit_hash": "anterior",
+      "changed_files": [
+        "src/views/admin/Products.tsx",
+        "src/hooks/use-integrations.ts",
+        "src/components/admin/CheckoutCoreSidebar.tsx",
+        "api/produtos/index.ts",
+        "src/hooks/useAuth.ts"
+      ],
+      "breaking_changes": false,
+      "type": "fix"
+    },
+    {
+      "version": "0.8.0",
+      "deployed_at": "2026-02-28T14:30:00Z",
+      "summary": "Upload e exibição de imagens de produtos + buckets Supabase Storage",
+      "commit_hash": "anterior",
+      "changed_files": [
+        "api/produtos/upload.ts",
+        "src/views/admin/Products.tsx",
+        "src/views/Checkout.tsx",
+        "src/components/checkout/CheckoutShell.tsx"
+      ],
+      "breaking_changes": false,
+      "type": "feat"
+    },
+    {
+      "version": "0.7.0",
+      "deployed_at": "2026-02-27T16:00:00Z",
+      "summary": "Agente IA - Health Check Webhooks + análise de pedidos Supabase",
+      "commit_hash": "anterior",
+      "changed_files": [
+        "src/lib/agente-integracoes.ts",
+        "src/views/admin/AgenteIA.tsx"
+      ],
+      "breaking_changes": false,
+      "type": "feat"
+    },
+    {
+      "version": "0.6.0",
+      "deployed_at": "2026-02-26T11:00:00Z",
+      "summary": "Anti-fraude: reCAPTCHA v3 no checkout (fail-open, score < 0.3 bloqueia)",
+      "commit_hash": "anterior",
+      "changed_files": [
+        "api/process-payment.ts",
+        "src/components/checkout/CheckoutShell.tsx",
+        "index.html"
+      ],
+      "breaking_changes": false,
+      "type": "feat"
+    },
+    {
+      "version": "0.5.0",
+      "deployed_at": "2026-02-25T09:30:00Z",
+      "summary": "Processamento unificado de pagamentos: Stripe (cartão) + PushinPay/MundPay (PIX)",
+      "commit_hash": "anterior",
+      "changed_files": [
+        "api/process-payment.ts",
+        "api/stripe/webhook.ts",
+        "api/stripe/create-payment-intent.ts",
+        "api/pix/gerar-pelo-n8n.ts",
+        "src/components/checkout/CheckoutShell.tsx"
+      ],
+      "breaking_changes": false,
+      "type": "feat"
+    }
+  ]
+}

@@ -90,9 +90,9 @@ $newVersionEntry = @{
 Write-Host "📝 Atualizando public/version.json..." -ForegroundColor Cyan
 $newVersionEntry | ConvertTo-Json -Depth 10 | Set-Content $versionPath
 
-# Atualizar version-history.json
-Write-Host "📝 Atualizando version-history.json..." -ForegroundColor Cyan
-$historyPath = "version-history.json"
+# Atualizar public/version-history.json
+Write-Host "📝 Atualizando public/version-history.json..." -ForegroundColor Cyan
+$historyPath = "public/version-history.json"
 
 if (Test-Path $historyPath) {
     $history = Get-Content $historyPath | ConvertFrom-Json
@@ -118,7 +118,7 @@ Write-Host "   Commit: $commitHash" -ForegroundColor White
 Write-Host "   Resumo: $Summary" -ForegroundColor White
 Write-Host ""
 Write-Host "📋 Próximos passos:" -ForegroundColor Cyan
-Write-Host "   1. git add public/version.json version-history.json" -ForegroundColor Gray
+Write-Host "   1. git add public/version.json public/version-history.json" -ForegroundColor Gray
 Write-Host "   2. git commit -m `"$Type`: $Summary (v$newVersion)`"" -ForegroundColor Gray
 Write-Host "   3. git push origin main" -ForegroundColor Gray
 Write-Host "   4. vercel --prod" -ForegroundColor Gray
