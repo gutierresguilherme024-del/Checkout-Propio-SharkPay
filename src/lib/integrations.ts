@@ -29,30 +29,27 @@ export const integrationService = {
 
         let results = data || [];
 
-        // Fallback BuyPix: se buscou por user_id e não encontrou buypix, usa registro global (user_id NULL)
-        if (type === 'payment' && userId && !results.find(r => r.id === 'buypix')) {
-            const { data: globalBuypix } = await supabase
-                .from('integrations')
-                .select('*')
-                .eq('id', 'buypix')
-                .eq('type', type)
-                .is('user_id', null)
-                .maybeSingle();
-            if (globalBuypix) {
-                results.push(globalBuypix);
+        // BuyPix: priorizar registro com user_id do usuário sobre registro global (user_id NULL)
+        // Pode existir registro seed com user_id=null E um registro por usuário — usa o do usuário
+        if (type === 'payment' && userId) {
+            const userBuypix = results.find(r => r.id === 'buypix' && r.user_id === userId);
+            if (!userBuypix) {
+                // Não encontrou por user_id, tenta o global como fallback
+                const { data: globalBuypix } = await supabase
+                    .from('integrations')
+                    .select('*')
+                    .eq('id', 'buypix')
+                    .eq('type', type)
+                    .is('user_id', null)
+                    .maybeSingle();
+                if (globalBuypix) {
+                    results.push(globalBuypix);
+                }
             }
-        }
-
-        // Log temporário para auditar retorno de BuyPix (enabled + config)
-        if (type === 'payment') {
-            const buypix = results.find(r => r.id === 'buypix');
-            if (buypix) {
-                console.log('[getSettings buypix]', JSON.stringify({
-                    id: buypix.id,
-                    enabled: buypix.enabled,
-                    hasApiKey: !!(buypix as any).config?.buypix_api_key,
-                    user_id: (buypix as any).user_id
-                }));
+            // Se encontrou AMBOS (user + null), remover o null para evitar conflito
+            const hasBothBuypix = results.filter(r => r.id === 'buypix').length > 1;
+            if (hasBothBuypix) {
+                results = results.filter(r => !(r.id === 'buypix' && r.user_id === null));
             }
         }
 
@@ -116,12 +113,14 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: delete+insert com erros explícitos (diagnóstico de RLS/constraints)
+        // BuyPix: delete do registro do usuário + insert limpo (evita conflito RLS com registro null)
         if (settings.id === 'buypix') {
+            // Deletar apenas o registro do usuário atual (RLS impede deletar user_id=null de outro usuário)
             const { error: deleteError } = await supabase
                 .from('integrations')
                 .delete()
-                .eq('id', 'buypix');
+                .eq('id', 'buypix')
+                .eq('user_id', settings.user_id || '');
 
             if (deleteError) {
                 console.error('[BuyPix] ERRO no DELETE:', deleteError);
