@@ -12,6 +12,8 @@ export interface IntegrationSettings {
 
 export const integrationService = {
     async getSettings(type: 'payment' | 'tracking' | 'n8n', userId?: string): Promise<IntegrationSettings[]> {
+        console.log(`[getSettings] START - type=${type}, userId=${userId}`);
+
         let query = supabase
             .from('integrations')
             .select('*')
@@ -20,6 +22,7 @@ export const integrationService = {
         if (userId) query = query.eq('user_id', userId);
 
         const { data, error } = await query;
+        console.log(`[getSettings] Initial query result:`, { error: !!error, dataLength: data?.length ?? 0, ids: data?.map(d => d.id) ?? [] });
 
         if (error) {
             console.warn(`Erro ao buscar integrações de ${type}, usando fallback local:`, error);
@@ -29,17 +32,22 @@ export const integrationService = {
 
         let results: IntegrationSettings[] = data || [];
 
-        // BuyPix: Busca global (sem filtro de user_id)
-        if (type === 'payment' && !results.find(r => r.id === 'buypix')) {
+        // BuyPix Resilience: Garantir que SEMPRE buscamos o registro global se não veio no query por user_id
+        const hasBuypix = results.find(r => r.id === 'buypix');
+        if (type === 'payment' && (!hasBuypix || (userId && hasBuypix.user_id))) {
+            console.log(`[getSettings] Fetching/Refining global BuyPix...`);
             const { data: globalBuypix } = await supabase
                 .from('integrations')
                 .select('*')
                 .eq('id', 'buypix')
-                .eq('type', type)
+                .is('user_id', null)
                 .maybeSingle();
 
             if (globalBuypix) {
+                // Se encontramos o global, removemos qualquer per-user (lixo) e adicionamos o global
+                results = results.filter(r => r.id !== 'buypix');
                 results.push(globalBuypix);
+                console.log(`[getSettings] Global BuyPix injected.`);
             }
         }
 
@@ -93,6 +101,7 @@ export const integrationService = {
             }
         }
 
+        console.log(`[getSettings] FINAL RESULT:`, { type, userId, totalCount: results.length, ids: results.map(r => `${r.id}(enabled=${r.enabled})`) });
         return results;
     },
 
@@ -103,44 +112,38 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: Gestão Global (regras de Admin)
+        // BuyPix: Garantir Registro Global Único (Resolve problema de estado que se perde)
         if (settings.id === 'buypix') {
-            // Verifica se já existe registro buypix (global)
-            const { data: existing } = await supabase
-                .from('integrations')
-                .select('id')
-                .eq('id', 'buypix')
-                .maybeSingle();
+            console.log('[BuyPix] Iniciando salvamento global...');
 
-            if (existing) {
-                const { error } = await supabase
+            // 1. Deletar qualquer registro buypix que NÃO seja o global (limpeza de lixo per-user)
+            if (settings.user_id) {
+                await supabase
                     .from('integrations')
-                    .update({
-                        enabled: settings.enabled,
-                        config: settings.config,
-                        name: settings.name,
-                        updated_at: payload.updated_at
-                    })
-                    .eq('id', 'buypix');
-
-                if (error) throw new Error(`BuyPix UPDATE falhou: ${error.message}`);
-            } else {
-                const { error } = await supabase
-                    .from('integrations')
-                    .insert({
-                        id: 'buypix',
-                        type: settings.type,
-                        name: settings.name,
-                        enabled: settings.enabled,
-                        config: settings.config,
-                        user_id: null,
-                        updated_at: payload.updated_at
-                    });
-
-                if (error) throw new Error(`BuyPix INSERT falhou: ${error.message}`);
+                    .delete()
+                    .eq('id', 'buypix')
+                    .eq('user_id', settings.user_id);
             }
 
-            console.log('[BuyPix] Save OK — enabled:', settings.enabled);
+            // 2. Upsert no registro global (user_id NULL)
+            const { error } = await supabase
+                .from('integrations')
+                .upsert({
+                    id: 'buypix',
+                    type: settings.type,
+                    name: settings.name,
+                    enabled: settings.enabled,
+                    config: settings.config,
+                    user_id: null,
+                    updated_at: payload.updated_at
+                }, { onConflict: 'id,user_id' });
+
+            if (error) {
+                console.error('[BuyPix] Erro no Upsert Global:', error);
+                throw new Error(`Falha ao salvar BuyPix global: ${error.message}`);
+            }
+
+            console.log('[BuyPix] Save Global OK — enabled:', settings.enabled);
             return;
         }
 
