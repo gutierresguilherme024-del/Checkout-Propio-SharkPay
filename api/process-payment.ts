@@ -489,6 +489,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PIX VIA BUYPIX (NEW)
     // ═══════════════════════════════════════
     if (method === 'pix' && gateway === 'buypix') {
+        // Busca o valor real do produto no banco (ignora valor do frontend)
+        let valorFinal = Number(valor)
+        if (productId) {
+            try {
+                const { data: produto } = await supabase
+                    .from('produtos')
+                    .select('preco, valor')
+                    .eq('id', productId)
+                    .maybeSingle()
+
+                if (produto) {
+                    valorFinal = Number(produto.preco ?? produto.valor ?? valor)
+                }
+            } catch (e) {
+                console.warn('[buypix] Erro ao buscar preço do produto, usando valor do frontend:', e)
+            }
+        }
+
         // ✅ VALIDAÇÃO DE NOME COMPLETO **ANTES** DE CRIAR O PEDIDO
         const validacaoNome = validarNomeCompleto(nome)
         if (!validacaoNome.valid) {
@@ -504,7 +522,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     payload: {
                         nome_recebido: nome,
                         email,
-                        valor,
+                        valor: valorFinal,
                         checkout_slug,
                         erro: validacaoNome.error
                     }
@@ -588,7 +606,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     user_id: productOwnerId,
                     email_comprador: email,
                     nome_comprador: nome || 'Cliente',
-                    valor: Number(valor),
+                    valor: valorFinal,
                     metodo_pagamento: 'pix',
                     status: 'pendente',
                     gateway: 'buypix',
@@ -601,7 +619,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             // 2. Criar depósito na BuyPix
-            console.log(`[buypix] Chamando API com key: ${apiKey.slice(0, 8)}... valor: ${valor}`)
+            console.log(`[buypix] Chamando API com key: ${apiKey.slice(0, 8)}... valor: ${valorFinal}`)
 
             const buyPixResp = await fetch('https://buypix.me/api/v1/deposits', {
                 method: 'POST',
@@ -612,7 +630,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     'X-Idempotency-Key': pid
                 },
                 body: JSON.stringify({
-                    amount: Math.round(Number(valor)),
+                    amount: valorFinal,
                     external_id: pid,
                     description: `Pedido ${pid}`
                 })
