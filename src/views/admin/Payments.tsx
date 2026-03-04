@@ -198,6 +198,12 @@ export default function AdminPayments() {
         values.buypix = { buypix_api_key: "", buypix_webhook_secret: "" };
         states.buypix = false;
       } else {
+        // Garante que as chaves existem mesmo que o config veio vazio do banco
+        values.buypix = {
+          buypix_api_key: values.buypix.buypix_api_key || "",
+          buypix_webhook_secret: values.buypix.buypix_webhook_secret || "",
+          ...values.buypix
+        };
         states.buypix = itemEnabled(payments, 'buypix') ?? false;
       }
 
@@ -210,15 +216,17 @@ export default function AdminPayments() {
       setConfigValues(values);
       setIsLoading(false);
     }
+
     if (skipNextFetch) {
+      // Se skipNextFetch for verdadeiro, apenas resetamos ele e não carregamos
       setSkipNextFetch(false);
       return;
     }
+
     load();
   }, [session?.user?.id, skipNextFetch]);
 
   const handleSave = async (id: string) => {
-    console.log('[handleSave] Iniciando para id:', id);
     const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;
 
     let isEnabled = activeStates[id];
@@ -403,13 +411,7 @@ export default function AdminPayments() {
             <div className="mt-5 flex flex-wrap gap-2">
               <Button
                 variant="hero"
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('[Salvar clicado] id:', integ.id);
-                  handleSave(integ.id);
-                }}
+                onClick={() => handleSave(integ.id)}
               >
                 Salvar
               </Button>
