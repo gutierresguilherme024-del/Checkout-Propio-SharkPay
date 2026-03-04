@@ -195,10 +195,9 @@ export default function AdminPayments() {
       // BuyPix (Garantir inicialização do objeto de config)
       if (!values.buypix) {
         values.buypix = { buypix_api_key: "", buypix_webhook_secret: "" };
-        states.buypix = false; // Começa como desativado se for novo
-      } else if (values.buypix && values.buypix.buypix_api_key) {
-        // Se já tem chave, consideramos configurado (UI badge)
-        states.buypix = itemEnabled(payments, 'buypix') || true;
+        states.buypix = false;
+      } else {
+        states.buypix = itemEnabled(payments, 'buypix') ?? false;
       }
 
       function itemEnabled(list: any[], id: string) {
@@ -211,7 +210,7 @@ export default function AdminPayments() {
       setIsLoading(false);
     }
     load();
-  }, []);
+  }, [session?.user?.id]);
 
   const handleSave = async (id: string) => {
     const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;

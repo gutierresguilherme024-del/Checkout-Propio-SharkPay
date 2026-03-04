@@ -29,6 +29,20 @@ export const integrationService = {
 
         let results = data || [];
 
+        // Fallback BuyPix: se buscou por user_id e não encontrou buypix, usa registro global (user_id NULL)
+        if (type === 'payment' && userId && !results.find(r => r.id === 'buypix')) {
+            const { data: globalBuypix } = await supabase
+                .from('integrations')
+                .select('*')
+                .eq('id', 'buypix')
+                .eq('type', type)
+                .is('user_id', null)
+                .maybeSingle();
+            if (globalBuypix) {
+                results.push(globalBuypix);
+            }
+        }
+
         // Remoção de duplicatas por ID, priorizando (1) ativas globais ou (2) last_updated
         if (!userId) {
             const map = new Map();
@@ -88,6 +102,32 @@ export const integrationService = {
             user_id: settings.user_id || null,
             updated_at: new Date().toISOString()
         };
+
+        // BuyPix: se existe registro global (user_id NULL), atualiza-o em vez de criar per-user
+        if (settings.id === 'buypix') {
+            const { data: globalRow } = await supabase
+                .from('integrations')
+                .select('id')
+                .eq('id', 'buypix')
+                .is('user_id', null)
+                .maybeSingle();
+            if (globalRow) {
+                const { error: updErr } = await supabase
+                    .from('integrations')
+                    .update({
+                        enabled: payload.enabled,
+                        config: payload.config,
+                        updated_at: payload.updated_at,
+                        name: payload.name
+                    })
+                    .eq('id', 'buypix')
+                    .is('user_id', null);
+                if (!updErr) {
+                    return;
+                }
+            }
+        }
+
         const { error } = await supabase
             .from('integrations')
             .upsert(payload as any, { onConflict: 'id,user_id' });
