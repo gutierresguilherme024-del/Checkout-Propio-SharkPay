@@ -103,31 +103,40 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: se existe registro global (user_id NULL), atualiza-o em vez de criar per-user
+        // BuyPix: delete+insert limpo (evita conflito de user_id NULL no upsert)
         if (settings.id === 'buypix') {
-            const { data: globalRow } = await supabase
+            // Deletar TODOS os registros buypix existentes (global e per-user)
+            await supabase
                 .from('integrations')
-                .select('id')
-                .eq('id', 'buypix')
-                .is('user_id', null)
-                .maybeSingle();
-            if (globalRow) {
-                const { error: updErr } = await supabase
-                    .from('integrations')
-                    .update({
-                        enabled: payload.enabled,
-                        config: payload.config,
-                        updated_at: payload.updated_at,
-                        name: payload.name
-                    })
-                    .eq('id', 'buypix')
-                    .is('user_id', null);
-                if (!updErr) {
-                    return;
-                }
+                .delete()
+                .eq('id', 'buypix');
+
+            const { error } = await supabase
+                .from('integrations')
+                .insert({
+                    id: 'buypix',
+                    type: settings.type,
+                    name: settings.name,
+                    enabled: settings.enabled,
+                    config: settings.config,
+                    user_id: settings.user_id || null,
+                    updated_at: payload.updated_at
+                });
+
+            if (error) {
+                console.error('[BuyPix] Erro ao salvar:', error);
+                // Fallback localStorage
+                const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
+                const existing: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
+                const index = existing.findIndex(s => s.id === settings.id);
+                if (index >= 0) existing[index] = settings;
+                else existing.push(settings);
+                localStorage.setItem(`sco_integ_${settings.type}`, JSON.stringify(existing));
             }
+            return;
         }
 
+        // Demais gateways: upsert normal (BLINDAGEM — não alterar)
         const { error } = await supabase
             .from('integrations')
             .upsert(payload as any, { onConflict: 'id,user_id' });
