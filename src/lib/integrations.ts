@@ -27,29 +27,19 @@ export const integrationService = {
             return local ? JSON.parse(local) : [];
         }
 
-        let results = data || [];
+        let results: IntegrationSettings[] = data || [];
 
-        // BuyPix: priorizar registro com user_id do usuário sobre registro global (user_id NULL)
-        // Pode existir registro seed com user_id=null E um registro por usuário — usa o do usuário
-        if (type === 'payment' && userId) {
-            const userBuypix = results.find(r => r.id === 'buypix' && r.user_id === userId);
-            if (!userBuypix) {
-                // Não encontrou por user_id, tenta o global como fallback
-                const { data: globalBuypix } = await supabase
-                    .from('integrations')
-                    .select('*')
-                    .eq('id', 'buypix')
-                    .eq('type', type)
-                    .is('user_id', null)
-                    .maybeSingle();
-                if (globalBuypix) {
-                    results.push(globalBuypix);
-                }
-            }
-            // Se encontrou AMBOS (user + null), remover o null para evitar conflito
-            const hasBothBuypix = results.filter(r => r.id === 'buypix').length > 1;
-            if (hasBothBuypix) {
-                results = results.filter(r => !(r.id === 'buypix' && r.user_id === null));
+        // BuyPix: Busca global (sem filtro de user_id)
+        if (type === 'payment' && !results.find(r => r.id === 'buypix')) {
+            const { data: globalBuypix } = await supabase
+                .from('integrations')
+                .select('*')
+                .eq('id', 'buypix')
+                .eq('type', type)
+                .maybeSingle();
+
+            if (globalBuypix) {
+                results.push(globalBuypix);
             }
         }
 
@@ -113,25 +103,17 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: estratégia específica respeitando RLS - UPDATE se existir, INSERT se não existir
+        // BuyPix: Gestão Global (regras de Admin)
         if (settings.id === 'buypix') {
-            const userId = settings.user_id || null;
-
-            // Primeiro tenta localizar registro do próprio usuário
-            const { data: existing, error: selectError } = await supabase
+            // Verifica se já existe registro buypix (global)
+            const { data: existing } = await supabase
                 .from('integrations')
                 .select('id')
                 .eq('id', 'buypix')
-                .eq('user_id', userId)
                 .maybeSingle();
 
-            if (selectError) {
-                console.error('[BuyPix] Erro ao localizar registro existente:', selectError);
-            }
-
             if (existing) {
-                // Registro já existe para este usuário: UPDATE
-                const { error: updateError } = await supabase
+                const { error } = await supabase
                     .from('integrations')
                     .update({
                         enabled: settings.enabled,
@@ -139,24 +121,11 @@ export const integrationService = {
                         name: settings.name,
                         updated_at: payload.updated_at
                     })
-                    .eq('id', 'buypix')
-                    .eq('user_id', userId);
+                    .eq('id', 'buypix');
 
-                if (updateError) {
-                    console.error('[BuyPix] UPDATE falhou:', updateError);
-                    // Fallback localStorage
-                    const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
-                    const existingLs: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
-                    const index = existingLs.findIndex(s => s.id === settings.id);
-                    if (index >= 0) existingLs[index] = settings;
-                    else existingLs.push(settings);
-                    localStorage.setItem(`sco_integ_${settings.type}`, JSON.stringify(existingLs));
-                } else {
-                    console.log('[BuyPix] Save OK — enabled (update):', settings.enabled);
-                }
+                if (error) throw new Error(`BuyPix UPDATE falhou: ${error.message}`);
             } else {
-                // Não existe registro para este usuário: INSERT
-                const { error: insertError } = await supabase
+                const { error } = await supabase
                     .from('integrations')
                     .insert({
                         id: 'buypix',
@@ -164,24 +133,14 @@ export const integrationService = {
                         name: settings.name,
                         enabled: settings.enabled,
                         config: settings.config,
-                        user_id: userId,
+                        user_id: null,
                         updated_at: payload.updated_at
                     });
 
-                if (insertError) {
-                    console.error('[BuyPix] INSERT falhou:', insertError);
-                    // Fallback localStorage
-                    const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
-                    const existingLs: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
-                    const index = existingLs.findIndex(s => s.id === settings.id);
-                    if (index >= 0) existingLs[index] = settings;
-                    else existingLs.push(settings);
-                    localStorage.setItem(`sco_integ_${settings.type}`, JSON.stringify(existingLs));
-                } else {
-                    console.log('[BuyPix] Save OK — enabled (insert):', settings.enabled);
-                }
+                if (error) throw new Error(`BuyPix INSERT falhou: ${error.message}`);
             }
 
+            console.log('[BuyPix] Save OK — enabled:', settings.enabled);
             return;
         }
 
