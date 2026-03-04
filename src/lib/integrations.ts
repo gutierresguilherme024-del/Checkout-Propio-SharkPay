@@ -100,43 +100,22 @@ export const integrationService = {
     },
 
     async saveSettings(settings: IntegrationSettings): Promise<void> {
+        const isBuypix = settings.id === 'buypix';
+
         const payload = {
             ...settings,
-            user_id: settings.user_id || null,
+            user_id: isBuypix ? null : (settings.user_id || null),
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: salvar via API route backend (usa service_role — bypass RLS)
-        if (settings.id === 'buypix') {
-            console.log('[integrations saveSettings buypix] config a enviar:', settings.config);
-            const resp = await fetch('/api/save-integration', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: 'buypix',
-                    type: settings.type,
-                    name: settings.name,
-                    enabled: settings.enabled,
-                    config: settings.config
-                })
-            });
-
-            const result = await resp.json();
-            if (!resp.ok) {
-                console.error('[BuyPix] Erro na API save-integration:', result);
-                throw new Error(result.error || 'Erro ao salvar via API');
-            }
-
-            return;
-        }
-
-        // Demais gateways: upsert normal (BLINDAGEM — não alterar)
         const { error } = await supabase
             .from('integrations')
-            .upsert(payload as any, { onConflict: 'id,user_id' });
+            .upsert(payload as any, {
+                onConflict: isBuypix ? 'id' : 'id,user_id'
+            });
 
         if (error) {
-            console.warn("Erro ao salvar no Supabase, salvando no localStorage:", error);
+            console.warn("Erro ao salvar no Supabase:", error);
             const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
             const existing: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
             const index = existing.findIndex(s => s.id === settings.id);
