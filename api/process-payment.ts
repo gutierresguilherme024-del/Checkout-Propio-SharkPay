@@ -612,7 +612,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     'X-Idempotency-Key': pid
                 },
                 body: JSON.stringify({
-                    amount: Math.round(Number(valor) * 100),
+                    amount: Math.round(Number(valor)),
                     external_id: pid,
                     description: `Pedido ${pid}`
                 })
@@ -683,7 +683,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch { /* ignora */ }
 
             return res.status(200).json({
-                qr_code: qrCodeBase64 || qrCodeText,
+                qr_code: qrCodeBase64 ? `data:image/png;base64,${qrCodeBase64.replace(/^data:image\/[a-z]+;base64,/, '')}` : qrCodeText,
                 qr_code_text: qrCodeText,
                 expires_at: buyPixData.expires_at || buyPixData.expiration || new Date(Date.now() + 30 * 60000).toISOString(),
                 pedido_id: pid,
