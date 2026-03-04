@@ -218,6 +218,7 @@ export default function AdminPayments() {
   }, [session?.user?.id, skipNextFetch]);
 
   const handleSave = async (id: string) => {
+    console.log('[handleSave] Iniciando para id:', id);
     const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;
 
     let isEnabled = activeStates[id];
@@ -402,7 +403,10 @@ export default function AdminPayments() {
             <div className="mt-5 flex flex-wrap gap-2">
               <Button
                 variant="hero"
-                onClick={() => handleSave(integ.id)}
+                onClick={() => {
+                  console.log('[Salvar clicado] id:', integ.id);
+                  handleSave(integ.id);
+                }}
               >
                 Salvar
               </Button>
