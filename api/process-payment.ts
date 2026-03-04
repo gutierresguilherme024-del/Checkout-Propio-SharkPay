@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 // import { createPayment } from '../core/paymentRouter' // REMOVIDO: causando erro de build no Vercel
@@ -93,8 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
     }
 
-    // Gerar ID único do pedido
-    const pid = `PED-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
+    // Gerar ID único do pedido (UUID — coluna id é UUID no banco)
+    const pid = randomUUID()
 
     // ─── SaaS: Identificar o dono do produto ───
     let productOwnerId: string | null = null
