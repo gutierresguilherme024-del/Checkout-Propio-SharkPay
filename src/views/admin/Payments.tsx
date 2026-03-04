@@ -142,6 +142,7 @@ export default function AdminPayments() {
   const [configValues, setConfigValues] = useState<Record<string, Record<string, string | number | boolean | null>>>({});
   const [openInteg, setOpenInteg] = useState<Integration["id"] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [skipNextFetch, setSkipNextFetch] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -209,8 +210,12 @@ export default function AdminPayments() {
       setConfigValues(values);
       setIsLoading(false);
     }
+    if (skipNextFetch) {
+      setSkipNextFetch(false);
+      return;
+    }
     load();
-  }, [session?.user?.id]);
+  }, [session?.user?.id, skipNextFetch]);
 
   const handleSave = async (id: string) => {
     const integ = PAYMENT_INTEGRATIONS.find(i => i.id === id)!;
@@ -234,6 +239,7 @@ export default function AdminPayments() {
       user_id: session?.user?.id
     });
 
+    setSkipNextFetch(true);
     toast.success(`Configurações de ${integ.name} salvas!`);
   };
 
@@ -253,6 +259,7 @@ export default function AdminPayments() {
       user_id: session?.user?.id
     });
 
+    setSkipNextFetch(true);
     toast.success(`${integ.name} ${enabled ? 'ativado' : 'desativado'} com sucesso!`);
   };
 
@@ -351,7 +358,7 @@ export default function AdminPayments() {
                 <span className="text-xs text-muted-foreground">Ativo</span>
                 <Switch
                   checked={activeStates[integ.id]}
-                  onCheckedChange={(v) => setActiveStates(prev => ({ ...prev, [integ.id]: v }))}
+                  onCheckedChange={(v) => handleToggle(integ.id, v)}
                 />
               </div>
             </div>
