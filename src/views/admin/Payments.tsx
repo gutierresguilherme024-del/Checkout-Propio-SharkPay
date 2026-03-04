@@ -403,7 +403,10 @@ export default function AdminPayments() {
             <div className="mt-5 flex flex-wrap gap-2">
               <Button
                 variant="hero"
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   console.log('[Salvar clicado] id:', integ.id);
                   handleSave(integ.id);
                 }}
