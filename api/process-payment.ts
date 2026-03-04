@@ -489,8 +489,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PIX VIA BUYPIX (NEW)
     // ═══════════════════════════════════════
     if (method === 'pix' && gateway === 'buypix') {
-        // Busca o valor real do produto no banco (ignora valor do frontend)
-        let valorFinal = Number(valor)
+        // Busca o valor real do produto no banco em reais
+        let valorFinal = Number(valor) / 100 // frontend envia centavos, converter para reais
         if (productId) {
             try {
                 const { data: produto } = await supabase
@@ -500,10 +500,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .maybeSingle()
 
                 if (produto) {
-                    valorFinal = Number(produto.preco ?? produto.valor ?? valor)
+                    const precoDb = Number(produto.preco ?? produto.valor ?? null)
+                    if (precoDb && precoDb > 0) {
+                        // Banco salva em reais (ex: 17.90) — usar direto
+                        valorFinal = precoDb
+                    }
                 }
             } catch (e) {
-                console.warn('[buypix] Erro ao buscar preço do produto, usando valor do frontend:', e)
+                console.warn('[buypix] Erro ao buscar preço, usando valor do frontend convertido:', e)
             }
         }
 
