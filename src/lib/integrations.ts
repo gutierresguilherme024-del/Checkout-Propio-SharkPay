@@ -116,15 +116,19 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: delete+insert limpo (evita conflito de user_id NULL no upsert)
+        // BuyPix: delete+insert com erros explícitos (diagnóstico de RLS/constraints)
         if (settings.id === 'buypix') {
-            // Deletar TODOS os registros buypix existentes (global e per-user)
-            await supabase
+            const { error: deleteError } = await supabase
                 .from('integrations')
                 .delete()
                 .eq('id', 'buypix');
 
-            const { error } = await supabase
+            if (deleteError) {
+                console.error('[BuyPix] ERRO no DELETE:', deleteError);
+                throw new Error(`BuyPix DELETE falhou: ${deleteError.message}`);
+            }
+
+            const { error: insertError } = await supabase
                 .from('integrations')
                 .insert({
                     id: 'buypix',
@@ -136,16 +140,12 @@ export const integrationService = {
                     updated_at: payload.updated_at
                 });
 
-            if (error) {
-                console.error('[BuyPix] Erro ao salvar:', error);
-                // Fallback localStorage
-                const existingRaw = localStorage.getItem(`sco_integ_${settings.type}`);
-                const existing: IntegrationSettings[] = existingRaw ? JSON.parse(existingRaw) : [];
-                const index = existing.findIndex(s => s.id === settings.id);
-                if (index >= 0) existing[index] = settings;
-                else existing.push(settings);
-                localStorage.setItem(`sco_integ_${settings.type}`, JSON.stringify(existing));
+            if (insertError) {
+                console.error('[BuyPix] ERRO no INSERT:', insertError);
+                throw new Error(`BuyPix INSERT falhou: ${insertError.message}`);
             }
+
+            console.log('[BuyPix] Save OK — enabled:', settings.enabled);
             return;
         }
 

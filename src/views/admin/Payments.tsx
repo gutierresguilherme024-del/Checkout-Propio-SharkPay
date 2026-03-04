@@ -230,17 +230,21 @@ export default function AdminPayments() {
       setActiveStates(prev => ({ ...prev, [id]: true }));
     }
 
-    await integrationService.saveSettings({
-      id,
-      type: 'payment',
-      name: integ.name,
-      enabled: isEnabled,
-      config: configValues[id] || {},
-      user_id: session?.user?.id
-    });
-
-    setSkipNextFetch(true);
-    toast.success(`Configurações de ${integ.name} salvas!`);
+    try {
+      await integrationService.saveSettings({
+        id,
+        type: 'payment',
+        name: integ.name,
+        enabled: isEnabled,
+        config: configValues[id] || {},
+        user_id: session?.user?.id
+      });
+      setSkipNextFetch(true);
+      toast.success(`Configurações de ${integ.name} salvas!`);
+    } catch (err: any) {
+      console.error('[handleSave] Erro:', err);
+      toast.error(`Erro ao salvar ${integ.name}: ${err.message}`);
+    }
   };
 
   const handleToggle = async (id: string, enabled: boolean) => {
