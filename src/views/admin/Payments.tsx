@@ -134,9 +134,9 @@ type Integration = (typeof PAYMENT_INTEGRATIONS)[number];
 export default function AdminPayments() {
   const { session } = useAuth();
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({
-    stripe: true,
-    pushinpay: true,
-    mundpay: true,
+    stripe: false,
+    pushinpay: false,
+    mundpay: false,
     buypix: false
   });
   const [configValues, setConfigValues] = useState<Record<string, Record<string, string | number | boolean | null>>>({});

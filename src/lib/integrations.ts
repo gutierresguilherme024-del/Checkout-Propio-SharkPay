@@ -12,8 +12,6 @@ export interface IntegrationSettings {
 
 export const integrationService = {
     async getSettings(type: 'payment' | 'tracking' | 'n8n', userId?: string): Promise<IntegrationSettings[]> {
-        console.log(`[getSettings] START - type=${type}, userId=${userId}`);
-
         let query = supabase
             .from('integrations')
             .select('*')
@@ -22,7 +20,6 @@ export const integrationService = {
         if (userId) query = query.eq('user_id', userId);
 
         const { data, error } = await query;
-        console.log(`[getSettings] Initial query result:`, { error: !!error, dataLength: data?.length ?? 0, ids: data?.map(d => d.id) ?? [] });
 
         if (error) {
             console.warn(`Erro ao buscar integrações de ${type}, usando fallback local:`, error);
@@ -35,7 +32,6 @@ export const integrationService = {
         // BuyPix Resilience: Garantir que SEMPRE buscamos o registro global se não veio no query por user_id
         const hasBuypix = results.find(r => r.id === 'buypix');
         if (type === 'payment' && (!hasBuypix || (userId && hasBuypix.user_id))) {
-            console.log(`[getSettings] Fetching/Refining global BuyPix...`);
             const { data: globalBuypix } = await supabase
                 .from('integrations')
                 .select('*')
@@ -47,7 +43,6 @@ export const integrationService = {
                 // Se encontramos o global, removemos qualquer per-user (lixo) e adicionamos o global
                 results = results.filter(r => r.id !== 'buypix');
                 results.push(globalBuypix);
-                console.log(`[getSettings] Global BuyPix injected.`);
             }
         }
 
@@ -101,7 +96,6 @@ export const integrationService = {
             }
         }
 
-        console.log(`[getSettings] FINAL RESULT:`, { type, userId, totalCount: results.length, ids: results.map(r => `${r.id}(enabled=${r.enabled})`) });
         return results;
     },
 
@@ -132,7 +126,6 @@ export const integrationService = {
                 throw new Error(result.error || 'Erro ao salvar via API');
             }
 
-            console.log('[BuyPix] Save via API OK — enabled:', settings.enabled);
             return;
         }
 
