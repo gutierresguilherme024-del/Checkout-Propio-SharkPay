@@ -239,6 +239,8 @@ export default function AdminPayments() {
       setActiveStates(prev => ({ ...prev, [id]: true }));
     }
 
+    console.log('[handleSave] configValues buypix:', configValues['buypix']);
+
     try {
       await integrationService.saveSettings({
         id,

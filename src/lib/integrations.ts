@@ -108,6 +108,7 @@ export const integrationService = {
 
         // BuyPix: salvar via API route backend (usa service_role — bypass RLS)
         if (settings.id === 'buypix') {
+            console.log('[integrations saveSettings buypix] config a enviar:', settings.config);
             const resp = await fetch('/api/save-integration', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

@@ -10,17 +10,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
     )
 
+    console.log('[save-integration] body recebido:', JSON.stringify(req.body))
+
     const { id, type, name, enabled, config } = req.body
 
     if (!id) return res.status(400).json({ error: 'id obrigatório' })
 
+    console.log('[save-integration] config recebido:', JSON.stringify(config))
+
     try {
-        // Verifica se existe registro com user_id null (global)
         const { data: existing } = await supabase
             .from('integrations')
             .select('id')
             .eq('id', id)
-            .is('user_id', null)
             .maybeSingle()
 
         if (existing) {
@@ -28,18 +30,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('integrations')
                 .update({ enabled, config, name })
                 .eq('id', id)
-                .is('user_id', null)
             if (error) throw error
+            console.log('[save-integration] UPDATE OK:', id, 'enabled:', enabled)
         } else {
             const { error } = await supabase
                 .from('integrations')
                 .insert({ id, type, name, enabled, config, user_id: null })
             if (error) throw error
+            console.log('[save-integration] INSERT OK:', id, 'enabled:', enabled)
         }
 
         return res.status(200).json({ success: true })
     } catch (err: any) {
-        console.error('[save-integration]', err)
+        console.error('[save-integration] ERRO:', err)
         return res.status(500).json({ error: err.message })
     }
 }
