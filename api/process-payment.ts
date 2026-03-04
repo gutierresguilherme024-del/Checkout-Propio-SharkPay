@@ -1,4 +1,5 @@
 import Stripe from 'stripe'
+// BLINDAGEM: Não altere esta importação. O crypto.randomUUID é essencial para o banco de dados.
 import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
@@ -24,19 +25,19 @@ function validarNomeCompleto(nome: string | null | undefined): { valid: boolean;
     if (!nome || typeof nome !== 'string') {
         return { valid: false, error: 'Nome completo obrigatório (nome + sobrenome)' }
     }
-    
+
     const nomeParts = nome.trim().split(/\s+/).filter(Boolean)
-    
+
     if (nomeParts.length < 2) {
         return { valid: false, error: 'Nome completo obrigatório (nome + sobrenome)' }
     }
-    
+
     // Verifica se tem pelo menos 2 caracteres em cada parte (evita "A B")
     const temPartesValidas = nomeParts.every(part => part.length >= 2)
     if (!temPartesValidas) {
         return { valid: false, error: 'Nome completo obrigatório (nome + sobrenome)' }
     }
-    
+
     return { valid: true }
 }
 
@@ -94,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
     }
 
-    // Gerar ID único do pedido (UUID — coluna id é UUID no banco)
+    // BLINDAGEM: Geração de ID único (UUID) — NÃO ALTERAR. Essencial para compatibilidade com tabela 'pedidos' (UUID).
     const pid = randomUUID()
 
     // ─── SaaS: Identificar o dono do produto ───
@@ -117,7 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ═══════════════════════════════════════
-    // CARTÃO VIA STRIPE
+    // BLINDAGEM: CARTÃO VIA STRIPE (FUNCIONANDO)
+    // NÃO ALTERAR ESTE BLOCO.
     // ═══════════════════════════════════════
     if (method === 'card') {
         let stripeKey = process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY
@@ -197,7 +199,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ═══════════════════════════════════════
-    // PIX VIA PUSHINPAY
+    // BLINDAGEM: PIX VIA PUSHINPAY (FUNCIONANDO)
+    // NÃO ALTERAR ESTE BLOCO.
     // ═══════════════════════════════════════
     if (method === 'pix' && (!gateway || gateway === 'pushinpay')) {
         // ✅ VALIDAÇÃO DE NOME COMPLETO **ANTES** DE CRIAR O PEDIDO
@@ -223,10 +226,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch (logErr) {
                 console.error('[pushinpay] Erro ao registrar log de validação:', logErr)
             }
-            
-            return res.status(400).json({ 
-                success: false, 
-                error: validacaoNome.error 
+
+            return res.status(400).json({
+                success: false,
+                error: validacaoNome.error
             })
         }
 
@@ -332,7 +335,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ═══════════════════════════════════════
-    // PIX VIA MUNDPAY (POPUP + POLLING)
+    // BLINDAGEM: PIX VIA MUNDPAY (FUNCIONANDO - UUID FIX)
+    // NÃO ALTERAR ESTE BLOCO.
     // ═══════════════════════════════════════
     if (method === 'pix' && gateway === 'mundpay') {
         // ✅ VALIDAÇÃO DE NOME COMPLETO **ANTES** DE CRIAR O PEDIDO
@@ -359,20 +363,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch (logErr) {
                 console.error('[mundpay] Erro ao registrar log de validação:', logErr)
             }
-            
-            return res.status(400).json({ 
-                success: false, 
-                error: validacaoNome.error 
+
+            return res.status(400).json({
+                success: false,
+                error: validacaoNome.error
             })
         }
 
         // Validar se mundpay_url foi enviado (erro de configuração = 400, não 500)
         const { cpf, phone, mundpay_url } = req.body;
-        
+
         if (!mundpay_url) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'URL do checkout MundPay não configurada para este produto. Configure o MundPay no painel admin.' 
+            return res.status(400).json({
+                success: false,
+                error: 'URL do checkout MundPay não configurada para este produto. Configure o MundPay no painel admin.'
             });
         }
 
@@ -402,12 +406,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 console.error('[mundpay] Detalhes:', insertError.details)
                 console.error('[mundpay] Hint:', insertError.hint)
                 console.error('[mundpay] Objeto completo:', JSON.stringify(insertError, null, 2))
-                
+
                 // Retornar mensagem específica do Supabase
                 const mensagemErro = insertError.message || insertError.hint || insertError.details || 'Falha ao registrar pedido no banco';
                 throw new Error(`[MundPay Insert] ${mensagemErro}`);
             }
-            
+
             console.log('[mundpay] ✅ Pedido criado com sucesso:', pid)
             console.log('[mundpay] Dados do pedido:', JSON.stringify(insertData, null, 2))
 
@@ -456,7 +460,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         } catch (err: any) {
             console.error('[process-payment/mundpay]:', err)
-            
+
             // Log de erro detalhado
             try {
                 await supabase.from('pedidos').update({ status: 'falhou', erro: err.message } as any).eq('id', pid)
@@ -471,12 +475,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     payload: { erro_stack: err.stack }
                 } as any)
             } catch { /* ignora */ }
-            
+
             // Retornar mensagem específica do erro (nunca genérica)
             const mensagemErro = err.message || 'Erro desconhecido ao processar pagamento MundPay';
-            return res.status(500).json({ 
+            return res.status(500).json({
                 success: false,
-                error: mensagemErro 
+                error: mensagemErro
             });
         }
     }
@@ -508,10 +512,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch (logErr) {
                 console.error('[buypix] Erro ao registrar log de validação:', logErr)
             }
-            
-            return res.status(400).json({ 
-                success: false, 
-                error: validacaoNome.error 
+
+            return res.status(400).json({
+                success: false,
+                error: validacaoNome.error
             })
         }
 
