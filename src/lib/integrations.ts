@@ -112,38 +112,27 @@ export const integrationService = {
             updated_at: new Date().toISOString()
         };
 
-        // BuyPix: Garantir Registro Global Único (Resolve problema de estado que se perde)
+        // BuyPix: salvar via API route backend (usa service_role — bypass RLS)
         if (settings.id === 'buypix') {
-            console.log('[BuyPix] Iniciando salvamento global...');
-
-            // 1. Deletar qualquer registro buypix que NÃO seja o global (limpeza de lixo per-user)
-            if (settings.user_id) {
-                await supabase
-                    .from('integrations')
-                    .delete()
-                    .eq('id', 'buypix')
-                    .eq('user_id', settings.user_id);
-            }
-
-            // 2. Upsert no registro global (user_id NULL)
-            const { error } = await supabase
-                .from('integrations')
-                .upsert({
+            const resp = await fetch('/api/save-integration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     id: 'buypix',
                     type: settings.type,
                     name: settings.name,
                     enabled: settings.enabled,
-                    config: settings.config,
-                    user_id: null,
-                    updated_at: payload.updated_at
-                }, { onConflict: 'id,user_id' });
+                    config: settings.config
+                })
+            });
 
-            if (error) {
-                console.error('[BuyPix] Erro no Upsert Global:', error);
-                throw new Error(`Falha ao salvar BuyPix global: ${error.message}`);
+            const result = await resp.json();
+            if (!resp.ok) {
+                console.error('[BuyPix] Erro na API save-integration:', result);
+                throw new Error(result.error || 'Erro ao salvar via API');
             }
 
-            console.log('[BuyPix] Save Global OK — enabled:', settings.enabled);
+            console.log('[BuyPix] Save via API OK — enabled:', settings.enabled);
             return;
         }
 
