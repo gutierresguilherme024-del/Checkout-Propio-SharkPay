@@ -277,9 +277,23 @@ export default function AdminPayments() {
           headers: { 'Authorization': `Bearer ${apiKey}` }
         });
         const data = await resp.json();
+        console.log('[BuyPix Test] Raw response:', data);
         if (resp.ok) {
           toast.dismiss();
-          toast.success(`Conectado! Conta: ${data.name} | Saldo: R$ ${data.balance / 100}`);
+          const accountLabel =
+            data.account_name ||
+            data.name ||
+            data.email ||
+            "Conta ativa";
+
+          let balanceLabel = "R$ 0,00";
+          if (data.balance != null) {
+            balanceLabel = `R$ ${(Number(data.balance) / 100).toFixed(2)}`;
+          } else if (data.amount != null) {
+            balanceLabel = `R$ ${(Number(data.amount) / 100).toFixed(2)}`;
+          }
+
+          toast.success(`Conectado! Conta: ${accountLabel} | Saldo: ${balanceLabel}`);
         } else {
           toast.dismiss();
           toast.error(`Erro: ${data.message || 'Falha na conexão'}`);

@@ -43,6 +43,19 @@ export const integrationService = {
             }
         }
 
+        // Log temporário para auditar retorno de BuyPix (enabled + config)
+        if (type === 'payment') {
+            const buypix = results.find(r => r.id === 'buypix');
+            if (buypix) {
+                console.log('[getSettings buypix]', JSON.stringify({
+                    id: buypix.id,
+                    enabled: buypix.enabled,
+                    hasApiKey: !!(buypix as any).config?.buypix_api_key,
+                    user_id: (buypix as any).user_id
+                }));
+            }
+        }
+
         // Remoção de duplicatas por ID, priorizando (1) ativas globais ou (2) last_updated
         if (!userId) {
             const map = new Map();
